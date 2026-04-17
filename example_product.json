@@ -1,0 +1,19 @@
+{
+  "title": "Stomatologik mikromotor burg'usi",
+  "description": "Yuqori aniqlikdagi stomatologik mikromotor burg'usi, implantu va protez ishlari uchun mos.",
+  "product_id": "SMB-1688",
+  "price_cny": 128.50,
+  "price_usd": 18.25,
+  "price_uzs": 635000,
+  "min_order": 1,
+  "variants": [
+    {
+      "name": "Tezlik",
+      "values": ["20000 rpm", "25000 rpm"]
+    },
+    {
+      "name": "Rang",
+      "values": ["Oq", "Moviy"]
+    }
+  ]
+}
