@@ -1,40 +1,58 @@
-# Hamkor-Xazdent-bot
+# XazDent Hamkor Bot 🦷
 
-Bu loyiha XazDent uchun mahsulot kartochkalarini avtomatik tayyorlashga yo'naltirilgan.
+AliExpress mahsulot havolasini yuborish orqali tayyor dental katalog kartochkasini olish uchun Telegram bot.
 
-## Tarkib
-- `xazdent_ai.py` — AI yordamida stomatologik mahsulot kartochkasi yaratish logikasi
-- `main.py` — JSON fayldan ma'lumot o'qib, kartochka chiqaradi
-- `example_product.json` — test uchun namunaviy mahsulot ma'lumotlari
-- `requirements.txt` — kerakli Python kutubxonalar
-- `.gitignore` — Python loyihasi uchun oddiy sozlamalar
+## Ishlash tartibi
+
+```
+Havola yuboriladi (AliExpress)
+     ↓
+Scraper HTML o'qiydi
+     ↓
+Claude AI o'zbekcha kartochka tayyorlaydi
+     ↓
+Rasm + matn + xom JSON yuboriladi
+```
 
 ## O'rnatish
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+### 1. @BotFather da yangi bot yarating
+```
+/newbot → nomini bering → TOKEN oling
 ```
 
-## Anthropic API kaliti
+### 2. Anthropic API key oling
+https://console.anthropic.com → API Keys → Create Key
 
-AI xizmati ishlashi uchun `ANTHROPIC_API_KEY` o'rnatilishi kerak:
+### 3. Railway da deploy
+1. GitHub ga push qiling
+2. Railway.app → New Project → GitHub Repo
+3. Variables qo'shing:
+   - `BOT_TOKEN` = Telegram bot tokeni
+   - `ANTHROPIC_API_KEY` = Anthropic API key
+4. Deploy — tayyor!
 
-```bash
-export ANTHROPIC_API_KEY="your_api_key_here"
+## Fayl tuzilmasi
+
+```
+├── bot.py           # Asosiy bot logikasi
+├── scraper.py       # AliExpress scraper
+├── ai_processor.py  # Claude AI kartochka generator
+├── requirements.txt
+├── railway.json     # Railway deploy config
+└── .env.example     # Environment o'zgaruvchilar namunasi
 ```
 
-## Ishlatish
+## Eslatma
 
-```bash
-python main.py example_product.json
-```
+AliExpress vaqti-vaqti bilan scraping ni cheklashi mumkin.
+Agar mahsulot ma'lumotlari to'liq kelmasa — havola to'g'ridan
+`aliexpress.com/item/XXXXX.html` formatida yuborilganligini tekshiring.
 
-Agar kalit yo'q bo'lsa, loyiha oddiy kartochka formatini chiqaradi.
+## Kelajakdagi rivojlantirish
 
-## Keyingi qadamlar
-
-- AliExpress / 1688 / Pinduoduo sahifasidan ma'lumot yig'uvchi scraper qo'shish
-- XazDent API bilan bog'lanish
-- koʻproq maydonlar (rasm URL, minimal buyurtma, artikul, variantlar) qo'shish
+- [ ] XazDentga avtomatik yuklash (API integratsiya)
+- [ ] 1688.com qo'shish
+- [ ] Valyuta kursi CBU API dan real-time olish
+- [ ] Narxga markup qo'shish (avtomatik)
+- [ ] Tarixni saqlash (oxirgi N ta mahsulot)
