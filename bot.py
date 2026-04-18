@@ -1,14 +1,16 @@
 import asyncio
 import logging
 import os
+import json
 import aiohttp
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
 from aiogram.filters import CommandStart
 from dotenv import load_dotenv
 
 from scraper import scrape_aliexpress
 from ai_processor import make_card
+from xazdent_uploader import upload_to_xazdent
 
 load_dotenv()
 
@@ -18,6 +20,9 @@ logger = logging.getLogger(__name__)
 bot = Bot(token=os.getenv("BOT_TOKEN"))
 dp = Dispatcher()
 
+# Vaqtincha xotira — mahsulot ma'lumotlarini saqlab turadi
+product_cache = {}
+
 # Barcha AliExpress domenlar + short linklar
 ALIEXPRESS_DOMAINS = [
     "aliexpress.com",
@@ -25,9 +30,9 @@ ALIEXPRESS_DOMAINS = [
     "a.aliexpress.com",
     "s.click.aliexpress.com",
     "click.aliexpress.com",
-    "ali.click",          # ← yangi
-    "alx.click",          # ← yangi
-    "aliclick.com",       # ← yangi
+    "ali.click",
+    "alx.click",
+    "aliclick.com",
 ]
 
 def is_aliexpress_link(text: str) -> bool:
@@ -92,7 +97,6 @@ async def handle_link(message: Message):
 
     # AliExpress ekanligini tekshirish
     if not is_aliexpress_link(url):
-        # Ehtimol short link redirect qilar — sinab ko'ramiz
         processing_msg = await message.answer("🔍 Havola tekshirilmoqda...")
         resolved = await resolve_short_url(url)
 
@@ -144,12 +148,14 @@ async def handle_link(message: Message):
         )
         card_text = await make_card(product_data)
 
-        await bot.delete_message(chat_id=message.chat.id, message_id=processing_msg.message_id)
+        await bot.delete_message(
+            chat_id=message.chat.id,
+            message_id=processing_msg.message_id
+        )
 
         # Rasmlarni yuborish
         photos = product_data.get("images", [])
         if photos:
-            from aiogram.types import InputMediaPhoto
             media = []
             for i, photo_url in enumerate(photos[:8]):
                 if i == 0:
@@ -161,7 +167,6 @@ async def handle_link(message: Message):
             await message.answer(card_text, parse_mode="HTML")
 
         # Xom JSON
-        import json
         raw = {
             "name": product_data.get("title", ""),
             "price_uzs": product_data.get("price_uzs", 0),
@@ -172,10 +177,30 @@ async def handle_link(message: Message):
             "min_order": product_data.get("min_order", 1),
             "artikul": product_data.get("product_id", ""),
         }
-        await message.answer("📋 <b>Xom ma'lumotlar (XazDentga yuklash uchun):</b>", parse_mode="HTML")
+        await message.answer(
+            "📋 <b>Xom ma'lumotlar:</b>",
+            parse_mode="HTML"
+        )
         await message.answer(
             f"<code>{json.dumps(raw, ensure_ascii=False, indent=2)}</code>",
             parse_mode="HTML"
+        )
+
+        # ✅ YANGI QISM: Mahsulotni keshga saqlaymiz
+        product_id = product_data.get("product_id", "")
+        product_cache[product_id] = product_data
+
+        # ✅ YANGI QISM: XazDentga yuklash tugmasi
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(
+                text="✅ XazDentga yuklash",
+                callback_data=f"upload:{product_id}"
+            )
+        ]])
+        await message.answer(
+            "👆 Kartochka tayyor!\n"
+            "XazDent katalogiga yuklash uchun tugmani bosing:",
+            reply_markup=keyboard
         )
 
     except Exception as e:
@@ -188,6 +213,50 @@ async def handle_link(message: Message):
             )
         except:
             await message.answer(f"❌ Xatolik: {str(e)[:200]}")
+
+
+# ✅ YANGI QISM: Tugma bosilganda ishlaydigan funksiya
+@dp.callback_query(F.data.startswith("upload:"))
+async def callback_upload(call: CallbackQuery):
+    product_id = call.data.split(":")[1]
+
+    # Keshdan mahsulot ma'lumotini olamiz
+    product_data = product_cache.get(product_id)
+    if not product_data:
+        await call.answer(
+            "⚠️ Ma'lumot topilmadi. Havolani qayta yuboring.",
+            show_alert=True
+        )
+        return
+
+    # "Yuklanmoqda..." deb xabarni o'zgartirамiz
+    await call.answer("⏳ Yuklanmoqda...")
+    await call.message.edit_text("⏳ XazDentga yuklanmoqda...")
+
+    # XazDentga yuboramiz
+    result = await upload_to_xazdent(product_data)
+
+    if result.get("ok"):
+        article = result.get("article_code", "")
+        pid = result.get("product_id", "")
+        await call.message.edit_text(
+            f"✅ <b>XazDentga yuklandi!</b>\n\n"
+            f"🔢 Artikul: <code>{article}</code>\n"
+            f"🆔 Mahsulot ID: <code>{pid}</code>\n\n"
+            f"🌍 @XazdentBot da katalogda ko'rinadi",
+            parse_mode="HTML"
+        )
+        # Keshdan o'chiramiz — endi kerak emas
+        product_cache.pop(product_id, None)
+    else:
+        error = result.get("error", "Noma'lum xatolik")
+        await call.message.edit_text(
+            f"❌ Yuklashda xatolik:\n"
+            f"<code>{error}</code>\n\n"
+            f"Qayta urinib ko'ring.",
+            parse_mode="HTML"
+        )
+
 
 async def main():
     logger.info("Bot ishga tushdi...")
