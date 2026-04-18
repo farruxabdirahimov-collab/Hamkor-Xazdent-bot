@@ -33,6 +33,9 @@ ALIEXPRESS_DOMAINS = [
     "ali.click",
     "alx.click",
     "aliclick.com",
+    "1688.com",
+    "detail.1688.com",
+    "s.1688.com",
 ]
 
 def is_aliexpress_link(text: str) -> bool:
