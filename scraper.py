@@ -3,13 +3,16 @@ import json
 import logging
 import asyncio
 import aiohttp
-from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
-# USD/CNY/UZS taxminiy kurslar (real loyihada CBU API dan oling)
+# =============================================================
+# SOZLAMALAR
+# =============================================================
+SCRAPER_API_KEY = "45c389c8d08b3c2bb43dbdaa7dd2a7d3"
 USD_TO_UZS = 12800
-CNY_TO_USD = 0.138  # 1 yuan ~ 0.138 USD
+CNY_TO_USD = 0.138
 
 HEADERS = {
     "User-Agent": (
@@ -18,15 +21,91 @@ HEADERS = {
         "Chrome/122.0.0.0 Safari/537.36"
     ),
     "Accept-Language": "en-US,en;q=0.9",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
 
+# =============================================================
+# MANUAL REJIM — foydalanuvchi o'zi yozgan ma'lumot
+# =============================================================
+def parse_manual_input(text: str) -> dict | None:
+    """
+    Foydalanuvchi quyidagi formatda yozsa:
+    
+    mahsulot:
+    nom: Dental turbina
+    narx: 850000
+    tavsif: Osstem implant uchun
+    rasm: https://...
+    
+    Yoki soddaroq:
+    nom: Dental turbina
+    narx: 850000
+    """
+    text = text.strip()
+
+    # "mahsulot:" yoki "nom:" bilan boshlanishi kerak
+    if not any(text.lower().startswith(k) for k in ["mahsulot:", "nom:", "name:"]):
+        return None
+
+    result = {
+        "product_id": f"manual_{abs(hash(text)) % 100000}",
+        "title": "",
+        "description": "",
+        "images": [],
+        "price_usd": 0.0,
+        "price_cny": 0.0,
+        "price_uzs": 0,
+        "variants": [],
+        "min_order": 1,
+        "_source": "manual",
+    }
+
+    lines = text.split("\n")
+    for line in lines:
+        line = line.strip()
+        if ":" not in line:
+            continue
+
+        key, _, value = line.partition(":")
+        key = key.strip().lower()
+        value = value.strip()
+
+        if key in ["nom", "name", "nomi"]:
+            result["title"] = value
+        elif key in ["narx", "price", "narxi"]:
+            # Faqat raqamlarni olish
+            digits = re.sub(r"[^\d]", "", value)
+            if digits:
+                price_uzs = int(digits)
+                result["price_uzs"] = price_uzs
+                result["price_usd"] = round(price_uzs / USD_TO_UZS, 2)
+                result["price_cny"] = round(result["price_usd"] / CNY_TO_USD, 2)
+        elif key in ["tavsif", "description", "tavsifi"]:
+            result["description"] = value
+        elif key in ["rasm", "image", "foto"]:
+            if value.startswith("http"):
+                result["images"].append(value)
+        elif key in ["miqdor", "min_order", "minimal"]:
+            digits = re.sub(r"[^\d]", "", value)
+            if digits:
+                result["min_order"] = int(digits)
+
+    # Nom majburiy
+    if not result["title"]:
+        return None
+
+    return result
+
+
+# =============================================================
+# URL YORDAMCHI FUNKSIYALAR
+# =============================================================
 def extract_product_id(url: str) -> str | None:
-    """AliExpress URL dan product ID olish"""
     patterns = [
         r"/item/(\d+)\.html",
         r"productId=(\d+)",
+        r"/offer/(\d+)\.html",
         r"/(\d{10,})\.",
+        r"id=(\d+)",
     ]
     for pattern in patterns:
         match = re.search(pattern, url)
@@ -34,192 +113,231 @@ def extract_product_id(url: str) -> str | None:
             return match.group(1)
     return None
 
-def clean_aliexpress_url(url: str) -> str:
-    """URL ni tozalash — tracking parametrlarini olib tashlash"""
-    parsed = urlparse(url)
-    # Faqat kerakli query param — item ID
+def clean_url(url: str) -> str:
     product_id = extract_product_id(url)
-    if product_id:
+    if "1688.com" in url and product_id:
+        return f"https://detail.1688.com/offer/{product_id}.html"
+    if "aliexpress" in url and product_id:
         return f"https://www.aliexpress.com/item/{product_id}.html"
     return url
 
 def parse_price(price_str) -> float:
-    """Narxni float ga aylantirish"""
     if isinstance(price_str, (int, float)):
         return float(price_str)
     if isinstance(price_str, str):
-        # "$12.50" yoki "12,50" yoki "US $12.50"
-        cleaned = re.sub(r"[^\d.,]", "", price_str)
-        cleaned = cleaned.replace(",", ".")
+        cleaned = re.sub(r"[^\d.,]", "", price_str).replace(",", ".")
         try:
             return float(cleaned)
         except:
             return 0.0
     return 0.0
 
-def extract_data_from_html(html: str, product_id: str) -> dict | None:
-    """HTML dan window.runParams yoki __NEXT_DATA__ ni olish"""
-    
-    # 1-usul: window.runParams
-    match = re.search(r'window\.runParams\s*=\s*(\{.+?\});\s*(?:var|window|$)', html, re.DOTALL)
-    if match:
-        try:
-            data = json.loads(match.group(1))
-            return parse_run_params(data, product_id)
-        except:
-            pass
 
-    # 2-usul: data: {...} pattern
-    match = re.search(r'"data"\s*:\s*(\{.*?"productId"\s*:\s*' + product_id + r'.*?\})\s*[,}]', html, re.DOTALL)
-    if match:
-        try:
-            data = json.loads(match.group(1))
-            return parse_generic_data(data, product_id)
-        except:
-            pass
-
-    # 3-usul: meta va og: taglar orqali minimal ma'lumot
-    return extract_meta_fallback(html, product_id)
-
-def parse_run_params(data: dict, product_id: str) -> dict | None:
-    """window.runParams strukturasidan ma'lumot olish"""
+# =============================================================
+# SCRAPERAPI ORQALI HTML OLISH
+# =============================================================
+async def fetch_with_scraperapi(url: str) -> str | None:
+    """ScraperAPI orqali sahifani yuklash — JavaScript render bilan"""
+    scraper_url = (
+        f"http://api.scraperapi.com"
+        f"?api_key={SCRAPER_API_KEY}"
+        f"&url={url}"
+        f"&render=true"          # JavaScript render
+        f"&country_code=us"
+    )
     try:
-        ae_data = data.get("data", {})
-        
-        # Nomi
-        title = (
-            ae_data.get("titleModule", {}).get("subject", "") or
-            ae_data.get("pageModule", {}).get("title", "") or
-            ""
-        )
-
-        # Narx
-        price_module = ae_data.get("priceModule", {})
-        price_usd = 0.0
-        min_price = price_module.get("minAmount", {})
-        if isinstance(min_price, dict):
-            price_usd = parse_price(min_price.get("value", 0))
-        elif price_module.get("formatedPrice"):
-            price_usd = parse_price(price_module.get("formatedPrice", "0"))
-
-        # Rasmlar
-        image_module = ae_data.get("imageModule", {})
-        images = image_module.get("imagePathList", [])
-        images = ["https:" + img if img.startswith("//") else img for img in images]
-
-        # Tavsif
-        description_module = ae_data.get("descriptionModule", {})
-        description = description_module.get("description", "")
-
-        # Variantlar (SKU)
-        sku_module = ae_data.get("skuModule", {})
-        variants = []
-        for prop in sku_module.get("productSKUPropertyList", []):
-            prop_name = prop.get("skuPropertyName", "")
-            values = [v.get("propertyValueDefinitionName", v.get("propertyValueDisplayName", ""))
-                      for v in prop.get("skuPropertyValues", [])]
-            if values:
-                variants.append({"name": prop_name, "values": values})
-
-        # Minimal buyurtma
-        quantity_module = ae_data.get("quantityModule", {})
-        min_order = quantity_module.get("minQuantity", 1)
-
-        return {
-            "product_id": product_id,
-            "title": title,
-            "description": description[:2000],
-            "images": images[:10],
-            "price_usd": price_usd,
-            "price_cny": price_usd / CNY_TO_USD if price_usd else 0,
-            "price_uzs": int(price_usd * USD_TO_UZS),
-            "variants": variants,
-            "min_order": min_order,
-        }
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                scraper_url,
+                timeout=aiohttp.ClientTimeout(total=60),
+                headers=HEADERS
+            ) as resp:
+                if resp.status == 200:
+                    html = await resp.text(encoding="utf-8", errors="ignore")
+                    logger.info(f"ScraperAPI muvaffaqiyatli: {len(html)} belgi")
+                    return html
+                else:
+                    logger.error(f"ScraperAPI HTTP {resp.status}")
+                    return None
     except Exception as e:
-        logger.error(f"parse_run_params error: {e}")
+        logger.error(f"ScraperAPI xatolik: {e}")
         return None
 
-def parse_generic_data(data: dict, product_id: str) -> dict | None:
-    """Generic JSON strukturadan ma'lumot olish"""
-    title = data.get("title", data.get("subject", ""))
-    price_usd = parse_price(data.get("price", data.get("salePrice", "0")))
-    images = data.get("imageList", data.get("images", []))
+
+# =============================================================
+# HTML DAN MA'LUMOT OLISH
+# =============================================================
+def extract_from_html(html: str, product_id: str, is_1688: bool = False) -> dict | None:
+    """HTML dan mahsulot ma'lumotlarini olish"""
+
+    # 1. JSON-LD schema
+    json_ld = re.findall(r'<script[^>]+type="application/ld\+json"[^>]*>(.*?)</script>', html, re.DOTALL)
+    for jld in json_ld:
+        try:
+            data = json.loads(jld.strip())
+            if data.get("@type") in ["Product", "product"]:
+                title = data.get("name", "")
+                price_raw = 0
+                offers = data.get("offers", {})
+                if isinstance(offers, dict):
+                    price_raw = parse_price(offers.get("price", 0))
+                elif isinstance(offers, list) and offers:
+                    price_raw = parse_price(offers[0].get("price", 0))
+
+                images = []
+                img_data = data.get("image", [])
+                if isinstance(img_data, str):
+                    images = [img_data]
+                elif isinstance(img_data, list):
+                    images = img_data[:8]
+
+                if title and price_raw:
+                    price_usd = price_raw if price_raw < 1000 else price_raw / USD_TO_UZS
+                    return {
+                        "product_id": product_id,
+                        "title": title,
+                        "description": data.get("description", "")[:2000],
+                        "images": images,
+                        "price_usd": round(price_usd, 2),
+                        "price_cny": round(price_usd / CNY_TO_USD, 2),
+                        "price_uzs": int(price_usd * USD_TO_UZS),
+                        "variants": [],
+                        "min_order": 1,
+                        "_source": "json_ld",
+                    }
+        except:
+            pass
+
+    # 2. window.runParams (AliExpress)
+    match = re.search(r'window\.runParams\s*=\s*(\{.+?\});', html, re.DOTALL)
+    if match:
+        try:
+            data = json.loads(match.group(1))
+            ae = data.get("data", {})
+            title = ae.get("titleModule", {}).get("subject", "")
+            price_module = ae.get("priceModule", {})
+            price_usd = parse_price(
+                price_module.get("minAmount", {}).get("value", 0) or
+                price_module.get("formatedPrice", "0")
+            )
+            images = ae.get("imageModule", {}).get("imagePathList", [])
+            images = ["https:" + i if i.startswith("//") else i for i in images]
+
+            variants = []
+            for prop in ae.get("skuModule", {}).get("productSKUPropertyList", []):
+                values = [v.get("propertyValueDisplayName", "") for v in prop.get("skuPropertyValues", [])]
+                if values:
+                    variants.append({"name": prop.get("skuPropertyName", ""), "values": values})
+
+            if title:
+                return {
+                    "product_id": product_id,
+                    "title": title,
+                    "description": ae.get("descriptionModule", {}).get("description", "")[:2000],
+                    "images": images[:8],
+                    "price_usd": round(price_usd, 2),
+                    "price_cny": round(price_usd / CNY_TO_USD, 2),
+                    "price_uzs": int(price_usd * USD_TO_UZS),
+                    "variants": variants,
+                    "min_order": ae.get("quantityModule", {}).get("minQuantity", 1),
+                    "_source": "runParams",
+                }
+        except:
+            pass
+
+    # 3. 1688 uchun maxsus pattern
+    if is_1688:
+        title_match = re.search(r'"subject"\s*:\s*"([^"]+)"', html)
+        price_match = re.search(r'"priceInfo".*?"price"\s*:\s*"?([\d.]+)"?', html, re.DOTALL)
+        img_matches = re.findall(r'"imageList"\s*:\s*\[([^\]]+)\]', html)
+
+        title = title_match.group(1) if title_match else ""
+        price_cny = parse_price(price_match.group(1)) if price_match else 0
+
+        images = []
+        if img_matches:
+            imgs = re.findall(r'"(https?://[^"]+)"', img_matches[0])
+            images = imgs[:8]
+
+        if title:
+            price_usd = price_cny * CNY_TO_USD
+            return {
+                "product_id": product_id,
+                "title": title,
+                "description": "",
+                "images": images,
+                "price_usd": round(price_usd, 2),
+                "price_cny": round(price_cny, 2),
+                "price_uzs": int(price_usd * USD_TO_UZS),
+                "variants": [],
+                "min_order": 1,
+                "_source": "1688_pattern",
+            }
+
+    # 4. Meta fallback
+    title_m = re.search(r'<meta[^>]+property="og:title"[^>]+content="([^"]+)"', html)
+    img_m = re.findall(r'<meta[^>]+property="og:image"[^>]+content="([^"]+)"', html)
+    price_m = re.search(r'"price"\s*:\s*"?([\d.]+)"?', html)
+
+    title = title_m.group(1) if title_m else f"Mahsulot #{product_id}"
+    images = img_m[:5]
+    price_usd = parse_price(price_m.group(1)) if price_m else 0
 
     return {
         "product_id": product_id,
         "title": title,
-        "description": data.get("description", "")[:2000],
-        "images": images[:10],
-        "price_usd": price_usd,
-        "price_cny": price_usd / CNY_TO_USD if price_usd else 0,
-        "price_uzs": int(price_usd * USD_TO_UZS),
-        "variants": [],
-        "min_order": 1,
-    }
-
-def extract_meta_fallback(html: str, product_id: str) -> dict:
-    """Minimal ma'lumot — og: meta taglardan"""
-    title_match = re.search(r'<meta[^>]+property="og:title"[^>]+content="([^"]+)"', html)
-    desc_match = re.search(r'<meta[^>]+property="og:description"[^>]+content="([^"]+)"', html)
-    img_match = re.findall(r'<meta[^>]+property="og:image"[^>]+content="([^"]+)"', html)
-    price_match = re.search(r'"price"\s*:\s*"?([\d.]+)"?', html)
-
-    title = title_match.group(1) if title_match else f"Mahsulot #{product_id}"
-    desc = desc_match.group(1) if desc_match else ""
-    images = img_match[:8]
-    price_usd = parse_price(price_match.group(1)) if price_match else 0.0
-
-    return {
-        "product_id": product_id,
-        "title": title,
-        "description": desc,
+        "description": "",
         "images": images,
-        "price_usd": price_usd,
-        "price_cny": price_usd / CNY_TO_USD if price_usd else 0,
+        "price_usd": round(price_usd, 2),
+        "price_cny": round(price_usd / CNY_TO_USD, 2),
         "price_uzs": int(price_usd * USD_TO_UZS),
         "variants": [],
         "min_order": 1,
         "_source": "meta_fallback",
     }
 
+
+# =============================================================
+# ASOSIY SCRAPING FUNKSIYASI
+# =============================================================
 async def scrape_aliexpress(url: str) -> dict | None:
-    """Asosiy scraping funksiyasi"""
-    clean_url = clean_aliexpress_url(url)
-    product_id = extract_product_id(clean_url) or extract_product_id(url)
+    """AliExpress yoki 1688 havolasidan mahsulot ma'lumotini olish"""
 
-    if not product_id:
-        logger.error(f"Product ID topilmadi: {url}")
+    is_1688 = "1688.com" in url
+    clean = clean_url(url)
+    product_id = extract_product_id(clean) or extract_product_id(url) or "unknown"
+
+    logger.info(f"Scraping: {clean} (ID: {product_id})")
+
+    # ScraperAPI bilan yuklash
+    html = await fetch_with_scraperapi(clean)
+
+    if not html:
+        logger.warning("ScraperAPI ishlamadi — oddiy so'rov sinash")
+        # Oddiy so'rov bilan sinab ko'rish
+        try:
+            async with aiohttp.ClientSession(headers=HEADERS) as session:
+                async with session.get(
+                    clean,
+                    timeout=aiohttp.ClientTimeout(total=20),
+                    allow_redirects=True,
+                    ssl=False
+                ) as resp:
+                    if resp.status == 200:
+                        html = await resp.text(encoding="utf-8", errors="ignore")
+        except Exception as e:
+            logger.error(f"Oddiy so'rov ham ishlamadi: {e}")
+            return None
+
+    if not html:
         return None
 
-    logger.info(f"Scraping: {clean_url} (ID: {product_id})")
+    result = extract_from_html(html, product_id, is_1688=is_1688)
 
-    try:
-        async with aiohttp.ClientSession(headers=HEADERS) as session:
-            async with session.get(
-                clean_url,
-                timeout=aiohttp.ClientTimeout(total=20),
-                allow_redirects=True,
-                ssl=False
-            ) as resp:
-                if resp.status != 200:
-                    logger.error(f"HTTP {resp.status} for {clean_url}")
-                    return None
+    if result:
+        source = result.get("_source", "")
+        logger.info(f"Muvaffaqiyatli [{source}]: {result.get('title', '')[:50]}")
+    else:
+        logger.warning(f"Ma'lumot topilmadi: {product_id}")
 
-                html = await resp.text(encoding="utf-8", errors="ignore")
-
-        result = extract_data_from_html(html, product_id)
-
-        if result:
-            logger.info(f"Muvaffaqiyatli: {result.get('title', '')[:50]}")
-        else:
-            logger.warning(f"Ma'lumot topilmadi: {product_id}")
-
-        return result
-
-    except asyncio.TimeoutError:
-        logger.error("Timeout — AliExpress javob bermadi")
-        return None
-    except Exception as e:
-        logger.error(f"Scraping xatolik: {e}")
-        return None
+    return result
