@@ -8,7 +8,8 @@ import base64
 logger = logging.getLogger(__name__)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_URL      = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+GEMINI_URL       = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent"
+GEMINI_VISION_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent"
 
 # ============================================================
 # 1. AliExpress/1688 uchun kartochka
@@ -171,7 +172,7 @@ MUHIM:
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                f"{GEMINI_URL}?key={GEMINI_API_KEY}",
+                f"{GEMINI_VISION_URL}?key={GEMINI_API_KEY}",
                 headers={"Content-Type": "application/json"},
                 json={
                     "contents": [{
@@ -231,7 +232,9 @@ MUHIM:
 
     except Exception as e:
         logger.error(f"make_card_from_image xatolik: {e}")
-        return None
+        import traceback
+        logger.error(traceback.format_exc())
+        return {"_error": str(e)}
 
 
 # ============================================================
