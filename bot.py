@@ -109,7 +109,7 @@ async def do_upload(target, product_data: dict, is_callback: bool = False):
     else:
         msg = await target.answer("⏳ XazDentga yuklanmoqda...")
 
-    result = await upload_to_xazdent(product_data)
+    result = await upload_to_xazdent(product_data, bot=bot)
 
     text = (
         f"✅ <b>XazDentga yuklandi!</b>\n\n"
