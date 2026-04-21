@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_URL       = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent"
-GEMINI_VISION_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent"
+GEMINI_VISION_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
 # ============================================================
 # 1. AliExpress/1688 uchun kartochka
@@ -192,7 +192,22 @@ MUHIM:
             ) as resp:
                 data = await resp.json()
 
-        text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        # Javobni tekshirish
+        if "candidates" not in data:
+            error_msg = data.get("error", {}).get("message", str(data))
+            logger.error(f"Gemini candidates yo'q: {error_msg}")
+            return {"_error": f"Gemini: {error_msg}"}
+
+        if not data["candidates"]:
+            logger.error(f"Gemini bo'sh candidates: {data}")
+            return {"_error": "Gemini bo'sh javob qaytardi"}
+
+        candidate = data["candidates"][0]
+        if candidate.get("finishReason") == "SAFETY":
+            logger.error("Gemini SAFETY filter")
+            return {"_error": "Rasm xavfsizlik filtriga tushdi"}
+
+        text = candidate["content"]["parts"][0]["text"].strip()
         text = text.replace("```json", "").replace("```", "").strip()
         ai   = json.loads(text)
 
