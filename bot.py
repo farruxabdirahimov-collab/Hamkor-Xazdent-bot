@@ -12,7 +12,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from dotenv import load_dotenv
 
 from scraper import scrape_aliexpress, parse_manual_input
-from ai_processor import make_card
+from ai_processor import make_card, make_card_from_post
 from xazdent_uploader import upload_to_xazdent
 
 load_dotenv()
@@ -24,11 +24,9 @@ bot = Bot(token=os.getenv("BOT_TOKEN"))
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
-# Narx kutish holati
 class NarxState(StatesGroup):
     kutish = State()
 
-# Vaqtincha xotira
 product_cache = {}
 
 ALIEXPRESS_DOMAINS = [
@@ -47,7 +45,6 @@ def extract_url(text: str) -> str | None:
     return match.group(0) if match else None
 
 def format_price(price_uzs: int) -> str:
-    """Narxni chiroyli ko'rsatish: 1250000 → 1,250,000"""
     return f"{price_uzs:,}".replace(",", " ")
 
 async def resolve_short_url(url: str) -> str:
@@ -61,8 +58,12 @@ async def resolve_short_url(url: str) -> str:
         logger.error(f"Redirect xatolik: {e}")
         return url
 
+def format_product_id(source: str, extra: str = "") -> str:
+    import hashlib
+    raw = f"{source}_{extra}"
+    return hashlib.md5(raw.encode()).hexdigest()[:12]
+
 async def send_card_with_photos(message: Message, product_data: dict, card_text: str):
-    """Faqat kartochka va rasmlarni yuboradi — narx so'rovi alohida"""
     photos = product_data.get("images", [])
     if photos:
         media = []
@@ -73,35 +74,26 @@ async def send_card_with_photos(message: Message, product_data: dict, card_text:
                 media.append(InputMediaPhoto(media=photo_url))
         try:
             await message.answer_media_group(media)
+            return
         except:
-            await message.answer(card_text, parse_mode="HTML")
-    else:
-        await message.answer(card_text, parse_mode="HTML")
+            pass
+    await message.answer(card_text, parse_mode="HTML")
 
 async def ask_price(message: Message, product_data: dict, state: FSMContext):
-    """Narxni tasdiqlash yoki yangi narx so'rash"""
     product_id = product_data.get("product_id", "")
     price_uzs = product_data.get("price_uzs", 0)
-
-    # Keshga saqlash
     product_cache[product_id] = product_data
 
     if price_uzs and price_uzs > 0:
-        # Narx topilgan — tasdiqlashni so'raymiz
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="✅ Ha, to'g'ri", callback_data=f"price_ok:{product_id}"),
-                InlineKeyboardButton(text="✏️ O'zgartirish", callback_data=f"price_change:{product_id}"),
-            ]
-        ])
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="✅ Ha, to'g'ri", callback_data=f"price_ok:{product_id}"),
+            InlineKeyboardButton(text="✏️ O'zgartirish", callback_data=f"price_change:{product_id}"),
+        ]])
         await message.answer(
-            f"💰 <b>Topilgan narx:</b> {format_price(price_uzs)} so'm\n\n"
-            f"Bu narx to'g'rimi?",
-            reply_markup=keyboard,
-            parse_mode="HTML"
+            f"💰 <b>Topilgan narx:</b> {format_price(price_uzs)} so'm\n\nBu narx to'g'rimi?",
+            reply_markup=keyboard, parse_mode="HTML"
         )
     else:
-        # Narx topilmadi — so'raymiz
         await state.set_state(NarxState.kutish)
         await state.update_data(product_id=product_id)
         await message.answer(
@@ -111,40 +103,31 @@ async def ask_price(message: Message, product_data: dict, state: FSMContext):
             parse_mode="HTML"
         )
 
-async def do_upload(message_or_call, product_data: dict, is_callback: bool = False):
-    """XazDentga yuklash"""
+async def do_upload(target, product_data: dict, is_callback: bool = False):
     if is_callback:
-        await message_or_call.message.edit_text("⏳ XazDentga yuklanmoqda...")
+        await target.message.edit_text("⏳ XazDentga yuklanmoqda...")
     else:
-        msg = await message_or_call.answer("⏳ XazDentga yuklanmoqda...")
+        msg = await target.answer("⏳ XazDentga yuklanmoqda...")
 
     result = await upload_to_xazdent(product_data)
 
-    success_text = (
+    text = (
         f"✅ <b>XazDentga yuklandi!</b>\n\n"
         f"🔢 Artikul: <code>{result.get('article_code', '')}</code>\n"
-        f"🆔 Mahsulot ID: <code>{result.get('product_id', '')}</code>\n"
+        f"🆔 ID: <code>{result.get('product_id', '')}</code>\n"
         f"💰 Narx: {format_price(product_data.get('price_uzs', 0))} so'm\n\n"
         f"🌍 @XazdentBot katalogida ko'rinadi"
-    )
-    error_text = (
+    ) if result.get("ok") else (
         f"❌ Yuklashda xatolik:\n"
         f"<code>{result.get('error', 'Noma\'lum xatolik')}</code>\n\n"
         f"Qayta urinib ko'ring."
     )
 
     if is_callback:
-        await message_or_call.message.edit_text(
-            success_text if result.get("ok") else error_text,
-            parse_mode="HTML"
-        )
+        await target.message.edit_text(text, parse_mode="HTML")
     else:
-        await msg.edit_text(
-            success_text if result.get("ok") else error_text,
-            parse_mode="HTML"
-        )
+        await msg.edit_text(text, parse_mode="HTML")
 
-    # Keshdan o'chirish
     product_cache.pop(product_data.get("product_id", ""), None)
 
 
@@ -157,28 +140,91 @@ async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(
         "👋 Salom! Men <b>XazDent Hamkor Bot</b>man.\n\n"
-        "📎 <b>Havola orqali:</b>\n"
-        "AliExpress yoki 1688 havolasini yuboring\n\n"
-        "✍️ <b>Qo'lda kiritish:</b>\n"
+        "📎 <b>1. Havola:</b> AliExpress yoki 1688\n\n"
+        "📢 <b>2. Kanal post:</b> Telegram kanaldan postni forward qiling\n\n"
+        "✍️ <b>3. Qo'lda:</b>\n"
         "<code>nom: Dental turbina\n"
         "narx: 850000\n"
-        "tavsif: Osstem implant uchun</code>",
+        "tavsif: Tavsif matni</code>",
         parse_mode="HTML"
     )
 
-@dp.message(NarxState.kutish)
-async def handle_narx_input(message: Message, state: FSMContext):
-    """Foydalanuvchi narx yozganda"""
-    import re
-    text = message.text.strip()
-    digits = re.sub(r"[^\d]", "", text)
+# ============================================================
+# TELEGRAM FORWARD — kanal posti
+# ============================================================
+@dp.message(F.forward_origin)
+async def handle_forward(message: Message, state: FSMContext):
+    """Telegram kanaldan forward qilingan post"""
 
-    if not digits:
+    processing_msg = await message.answer("📢 Kanal posti o'qilmoqda...")
+
+    # Matnni olish
+    post_text = message.caption or message.text or ""
+
+    # Rasmlarni olish
+    photos = []
+    if message.photo:
+        # Eng katta o'lchamdagi rasmni olamiz
+        best_photo = message.photo[-1]
+        photos = [best_photo.file_id]
+    elif message.media_group_id:
+        # Media guruh — faqat birinchi rasm (boshqalari alohida keladi)
+        if message.photo:
+            photos = [message.photo[-1].file_id]
+
+    if not post_text and not photos:
+        await bot.edit_message_text(
+            "⚠️ Post da matn yoki rasm topilmadi.",
+            chat_id=message.chat.id,
+            message_id=processing_msg.message_id
+        )
+        return
+
+    # AI ga beramiz
+    await bot.edit_message_text(
+        "🤖 AI matnni tahlil qilmoqda...",
+        chat_id=message.chat.id,
+        message_id=processing_msg.message_id
+    )
+
+    # Post ma'lumotini tuzamiz
+    post_data = {
+        "text": post_text,
+        "photo_file_ids": photos,  # file_id lar — Telegram da allaqachon bor
+    }
+
+    # AI kartochka
+    product_data = await make_card_from_post(post_data)
+
+    await bot.delete_message(chat_id=message.chat.id, message_id=processing_msg.message_id)
+
+    if not product_data:
         await message.answer(
-            "⚠️ Faqat raqam yozing.\n"
-            "<i>Masalan: 850000</i>",
+            "❌ Postdan ma'lumot ajratib bo'lmadi.\n\n"
+            "Qo'lda kiriting:\n"
+            "<code>nom: Mahsulot nomi\nnarx: 850000</code>",
             parse_mode="HTML"
         )
+        return
+
+    # Kartochkani ko'rsatamiz
+    card_text = product_data.get("card_text", "")
+    if card_text:
+        await message.answer(card_text, parse_mode="HTML")
+
+    # Narx so'raymiz
+    await ask_price(message, product_data, state)
+
+
+# ============================================================
+# NARX HOLATI
+# ============================================================
+@dp.message(NarxState.kutish)
+async def handle_narx_input(message: Message, state: FSMContext):
+    import re
+    digits = re.sub(r"[^\d]", "", message.text.strip())
+    if not digits:
+        await message.answer("⚠️ Faqat raqam yozing.\n<i>Masalan: 850000</i>", parse_mode="HTML")
         return
 
     price_uzs = int(digits)
@@ -188,34 +234,31 @@ async def handle_narx_input(message: Message, state: FSMContext):
 
     if not product_data:
         await state.clear()
-        await message.answer("⚠️ Ma'lumot topilmadi. Havolani qayta yuboring.")
+        await message.answer("⚠️ Ma'lumot topilmadi. Qayta yuboring.")
         return
 
-    # Narxni yangilaymiz
     product_data["price_uzs"] = price_uzs
     product_data["price_usd"] = round(price_uzs / 12800, 2)
     product_cache[product_id] = product_data
 
     await state.clear()
-    await message.answer(f"✅ Narx qabul qilindi: <b>{format_price(price_uzs)} so'm</b>", parse_mode="HTML")
+    await message.answer(f"✅ Narx: <b>{format_price(price_uzs)} so'm</b>", parse_mode="HTML")
     await do_upload(message, product_data)
 
 
 @dp.callback_query(F.data.startswith("price_ok:"))
 async def callback_price_ok(call: CallbackQuery):
-    """Narx tasdiqlandi — yuklaymiz"""
     product_id = call.data.split(":")[1]
     product_data = product_cache.get(product_id)
     if not product_data:
         await call.answer("⚠️ Ma'lumot topilmadi.", show_alert=True)
         return
-    await call.answer("✅ Narx tasdiqlandi")
+    await call.answer("✅ Tasdiqlandi")
     await do_upload(call, product_data, is_callback=True)
 
 
 @dp.callback_query(F.data.startswith("price_change:"))
 async def callback_price_change(call: CallbackQuery, state: FSMContext):
-    """Narxni o'zgartirish"""
     product_id = call.data.split(":")[1]
     if product_id not in product_cache:
         await call.answer("⚠️ Ma'lumot topilmadi.", show_alert=True)
@@ -224,12 +267,14 @@ async def callback_price_change(call: CallbackQuery, state: FSMContext):
     await state.set_state(NarxState.kutish)
     await state.update_data(product_id=product_id)
     await call.message.edit_text(
-        "✏️ Yangi narxni so'mda yozing:\n"
-        "<i>Masalan: 850000</i>",
+        "✏️ Yangi narxni so'mda yozing:\n<i>Masalan: 850000</i>",
         parse_mode="HTML"
     )
 
 
+# ============================================================
+# MATN VA HAVOLA
+# ============================================================
 @dp.message(F.text)
 async def handle_message(message: Message, state: FSMContext):
     text = message.text.strip()
@@ -248,6 +293,7 @@ async def handle_message(message: Message, state: FSMContext):
         await bot.edit_message_text("🤖 AI kartochka tayyorlamoqda...",
             chat_id=message.chat.id, message_id=processing_msg.message_id)
         card_text = await make_card(product_data)
+        product_data["card_text"] = card_text
         await bot.delete_message(chat_id=message.chat.id, message_id=processing_msg.message_id)
         await send_card_with_photos(message, product_data, card_text)
         await ask_price(message, product_data, state)
@@ -258,7 +304,8 @@ async def handle_message(message: Message, state: FSMContext):
     if not url:
         await message.answer(
             "⚠️ Havola yoki ma'lumot topilmadi.\n\n"
-            "📎 AliExpress yoki 1688 havolasini yuboring\n\n"
+            "📎 AliExpress/1688 havolasi yuboring\n"
+            "📢 Kanal postini forward qiling\n"
             "✍️ Yoki qo'lda:\n"
             "<code>nom: Mahsulot nomi\nnarx: 850000</code>",
             parse_mode="HTML"
@@ -299,12 +346,9 @@ async def handle_message(message: Message, state: FSMContext):
         await bot.edit_message_text("🤖 AI kartochka tayyorlamoqda...",
             chat_id=message.chat.id, message_id=processing_msg.message_id)
         card_text = await make_card(product_data)
+        product_data["card_text"] = card_text
         await bot.delete_message(chat_id=message.chat.id, message_id=processing_msg.message_id)
-
-        # Kartochka yuborish
         await send_card_with_photos(message, product_data, card_text)
-
-        # Narx so'rash
         await ask_price(message, product_data, state)
 
     except Exception as e:
