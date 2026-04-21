@@ -178,10 +178,22 @@ async def handle_photo(message: Message, state: FSMContext):
 
         product_data = await make_card_from_image(image_bytes, "photo.jpg")
 
-        # Dental mahsulot emas
+        # Xatolik bo'ldimi
         if not product_data:
             await bot.edit_message_text(
                 "❌ Rasmdan ma'lumot ajratib bo'lmadi.\n\n"
+                "Qo'lda kiriting:\n"
+                "<code>nom: Mahsulot nomi\nnarx: 850000</code>",
+                chat_id=message.chat.id,
+                message_id=processing_msg.message_id,
+                parse_mode="HTML"
+            )
+            return
+
+        # Xatolik xabari
+        if product_data.get("_error"):
+            await bot.edit_message_text(
+                f"❌ AI xatolik:\n<code>{product_data['_error'][:300]}</code>\n\n"
                 "Qo'lda kiriting:\n"
                 "<code>nom: Mahsulot nomi\nnarx: 850000</code>",
                 chat_id=message.chat.id,
