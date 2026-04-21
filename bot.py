@@ -12,7 +12,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from dotenv import load_dotenv
 
 from scraper import scrape_aliexpress, parse_manual_input
-from ai_processor import make_card, make_card_from_post
+from ai_processor import make_card, make_card_from_post, make_card_from_image
 from xazdent_uploader import upload_to_xazdent
 
 load_dotenv()
@@ -58,20 +58,15 @@ async def resolve_short_url(url: str) -> str:
         logger.error(f"Redirect xatolik: {e}")
         return url
 
-def format_product_id(source: str, extra: str = "") -> str:
-    import hashlib
-    raw = f"{source}_{extra}"
-    return hashlib.md5(raw.encode()).hexdigest()[:12]
-
 async def send_card_with_photos(message: Message, product_data: dict, card_text: str):
     photos = product_data.get("images", [])
     if photos:
         media = []
-        for i, photo_url in enumerate(photos[:8]):
+        for i, url in enumerate(photos[:8]):
             if i == 0:
-                media.append(InputMediaPhoto(media=photo_url, caption=card_text, parse_mode="HTML"))
+                media.append(InputMediaPhoto(media=url, caption=card_text, parse_mode="HTML"))
             else:
-                media.append(InputMediaPhoto(media=photo_url))
+                media.append(InputMediaPhoto(media=url))
         try:
             await message.answer_media_group(media)
             return
@@ -79,26 +74,31 @@ async def send_card_with_photos(message: Message, product_data: dict, card_text:
             pass
     await message.answer(card_text, parse_mode="HTML")
 
-async def ask_price(message: Message, product_data: dict, state: FSMContext):
+async def ask_price(message: Message, product_data: dict, state: FSMContext,
+                    currency: str = "so'm"):
     product_id = product_data.get("product_id", "")
-    price_uzs = product_data.get("price_uzs", 0)
+    price_uzs  = product_data.get("price_uzs", 0)
     product_cache[product_id] = product_data
 
     if price_uzs and price_uzs > 0:
+        currency_note = ""
+        if product_data.get("price_currency") == "noaniq":
+            currency_note = "\n⚠️ <i>Valyuta noaniq — so'mga aylantiring</i>"
+
         keyboard = InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="✅ Ha, to'g'ri", callback_data=f"price_ok:{product_id}"),
             InlineKeyboardButton(text="✏️ O'zgartirish", callback_data=f"price_change:{product_id}"),
         ]])
         await message.answer(
-            f"💰 <b>Topilgan narx:</b> {format_price(price_uzs)} so'm\n\nBu narx to'g'rimi?",
+            f"💰 <b>Topilgan narx:</b> {format_price(price_uzs)} so'm"
+            f"{currency_note}\n\nBu narx to'g'rimi?",
             reply_markup=keyboard, parse_mode="HTML"
         )
     else:
         await state.set_state(NarxState.kutish)
         await state.update_data(product_id=product_id)
         await message.answer(
-            "💰 <b>Narx topilmadi.</b>\n\n"
-            "Mahsulot narxini so'mda yozing:\n"
+            "💰 <b>Narxni kiriting</b> (so'mda):\n"
             "<i>Masalan: 850000</i>",
             parse_mode="HTML"
         )
@@ -132,45 +132,161 @@ async def do_upload(target, product_data: dict, is_callback: bool = False):
 
 
 # ============================================================
-# HANDLERLAR
+# START
 # ============================================================
-
 @dp.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(
         "👋 Salom! Men <b>XazDent Hamkor Bot</b>man.\n\n"
-        "📎 <b>1. Havola:</b> AliExpress yoki 1688\n\n"
-        "📢 <b>2. Kanal post:</b> Telegram kanaldan postni forward qiling\n\n"
-        "✍️ <b>3. Qo'lda:</b>\n"
+        "Mahsulot qo'shish usullari:\n\n"
+        "🖼 <b>Rasm yuborish</b> — bot rasmdan o'qiydi\n\n"
+        "📎 <b>Havola:</b> AliExpress yoki 1688\n\n"
+        "📢 <b>Kanal post forward</b> qiling\n\n"
+        "✍️ <b>Qo'lda:</b>\n"
         "<code>nom: Dental turbina\n"
         "narx: 850000\n"
         "tavsif: Tavsif matni</code>",
         parse_mode="HTML"
     )
 
+
 # ============================================================
-# TELEGRAM FORWARD — kanal posti
+# RASM — Vision AI
+# ============================================================
+@dp.message(F.photo)
+async def handle_photo(message: Message, state: FSMContext):
+    """Foydalanuvchi rasm yuborsa — AI rasmdan o'qiydi"""
+
+    processing_msg = await message.answer("🔍 Rasm tahlil qilinmoqda...")
+
+    try:
+        # Eng yuqori sifatli rasmni olamiz
+        best_photo = message.photo[-1]
+        file_id    = best_photo.file_id
+
+        # Rasmni yuklab olamiz
+        file = await bot.get_file(file_id)
+        file_bytes = await bot.download_file(file.file_path)
+        image_bytes = file_bytes.read()
+
+        await bot.edit_message_text(
+            "🤖 AI rasmdan ma'lumot ajratmoqda...",
+            chat_id=message.chat.id,
+            message_id=processing_msg.message_id
+        )
+
+        product_data = await make_card_from_image(image_bytes, "photo.jpg")
+
+        # Dental mahsulot emas
+        if not product_data:
+            await bot.edit_message_text(
+                "❌ Rasmdan ma'lumot ajratib bo'lmadi.\n\n"
+                "Qo'lda kiriting:\n"
+                "<code>nom: Mahsulot nomi\nnarx: 850000</code>",
+                chat_id=message.chat.id,
+                message_id=processing_msg.message_id,
+                parse_mode="HTML"
+            )
+            return
+
+        if product_data.get("_not_dental"):
+            await bot.edit_message_text(
+                "⚠️ Bu stomatologiya mahsuloti emas.\n\n"
+                "Faqat dental mahsulot rasmlari qabul qilinadi.",
+                chat_id=message.chat.id,
+                message_id=processing_msg.message_id
+            )
+            return
+
+        # Rasmning file_id ni saqlaymiz
+        product_data["photo_file_ids"] = [file_id]
+
+        await bot.delete_message(
+            chat_id=message.chat.id,
+            message_id=processing_msg.message_id
+        )
+
+        card_text = product_data.get("card_text", "")
+
+        # Boshqa do'kon logosi bor — ogohlantirish
+        if product_data.get("has_other_shop_logo"):
+            shop_name = product_data.get("shop_name", "boshqa do'kon")
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(
+                    text="✅ Davom etish",
+                    callback_data=f"logo_ok:{product_data['product_id']}"
+                ),
+                InlineKeyboardButton(
+                    text="❌ Bekor qilish",
+                    callback_data="logo_cancel"
+                ),
+            ]])
+            product_cache[product_data["product_id"]] = product_data
+            await message.answer_photo(
+                photo=file_id,
+                caption=card_text,
+                parse_mode="HTML"
+            )
+            await message.answer(
+                f"⚠️ <b>Diqqat!</b>\n\n"
+                f"Rasmda <b>{shop_name}</b> logosi bor.\n"
+                f"Bu rasmni o'z do'koningizga yuklashni tasdiqlaysizmi?",
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+            return
+
+        # Oddiy holat — kartochka + narx so'rash
+        await message.answer_photo(
+            photo=file_id,
+            caption=card_text,
+            parse_mode="HTML"
+        )
+        await ask_price(message, product_data, state)
+
+    except Exception as e:
+        logger.error(f"Rasm xatolik: {e}")
+        try:
+            await bot.edit_message_text(
+                f"❌ Xatolik: {str(e)[:200]}",
+                chat_id=message.chat.id,
+                message_id=processing_msg.message_id
+            )
+        except:
+            await message.answer(f"❌ Xatolik: {str(e)[:200]}")
+
+
+# ============================================================
+# LOGO OGOHLANTIRISH CALLBACK
+# ============================================================
+@dp.callback_query(F.data.startswith("logo_ok:"))
+async def callback_logo_ok(call: CallbackQuery, state: FSMContext):
+    product_id   = call.data.split(":")[1]
+    product_data = product_cache.get(product_id)
+    if not product_data:
+        await call.answer("⚠️ Ma'lumot topilmadi.", show_alert=True)
+        return
+    await call.answer()
+    await call.message.delete()
+    await ask_price(call.message, product_data, state)
+
+@dp.callback_query(F.data == "logo_cancel")
+async def callback_logo_cancel(call: CallbackQuery):
+    await call.answer("Bekor qilindi")
+    await call.message.edit_text("❌ Yuklash bekor qilindi.")
+
+
+# ============================================================
+# TELEGRAM FORWARD
 # ============================================================
 @dp.message(F.forward_origin)
 async def handle_forward(message: Message, state: FSMContext):
-    """Telegram kanaldan forward qilingan post"""
-
     processing_msg = await message.answer("📢 Kanal posti o'qilmoqda...")
-
-    # Matnni olish
     post_text = message.caption or message.text or ""
-
-    # Rasmlarni olish
-    photos = []
+    photos    = []
     if message.photo:
-        # Eng katta o'lchamdagi rasmni olamiz
-        best_photo = message.photo[-1]
-        photos = [best_photo.file_id]
-    elif message.media_group_id:
-        # Media guruh — faqat birinchi rasm (boshqalari alohida keladi)
-        if message.photo:
-            photos = [message.photo[-1].file_id]
+        photos = [message.photo[-1].file_id]
 
     if not post_text and not photos:
         await bot.edit_message_text(
@@ -180,22 +296,13 @@ async def handle_forward(message: Message, state: FSMContext):
         )
         return
 
-    # AI ga beramiz
     await bot.edit_message_text(
         "🤖 AI matnni tahlil qilmoqda...",
         chat_id=message.chat.id,
         message_id=processing_msg.message_id
     )
 
-    # Post ma'lumotini tuzamiz
-    post_data = {
-        "text": post_text,
-        "photo_file_ids": photos,  # file_id lar — Telegram da allaqachon bor
-    }
-
-    # AI kartochka
-    product_data = await make_card_from_post(post_data)
-
+    product_data = await make_card_from_post({"text": post_text, "photo_file_ids": photos})
     await bot.delete_message(chat_id=message.chat.id, message_id=processing_msg.message_id)
 
     if not product_data:
@@ -207,12 +314,8 @@ async def handle_forward(message: Message, state: FSMContext):
         )
         return
 
-    # Kartochkani ko'rsatamiz
     card_text = product_data.get("card_text", "")
-    if card_text:
-        await message.answer(card_text, parse_mode="HTML")
-
-    # Narx so'raymiz
+    await message.answer(card_text, parse_mode="HTML")
     await ask_price(message, product_data, state)
 
 
@@ -227,9 +330,9 @@ async def handle_narx_input(message: Message, state: FSMContext):
         await message.answer("⚠️ Faqat raqam yozing.\n<i>Masalan: 850000</i>", parse_mode="HTML")
         return
 
-    price_uzs = int(digits)
-    data = await state.get_data()
-    product_id = data.get("product_id", "")
+    price_uzs    = int(digits)
+    data         = await state.get_data()
+    product_id   = data.get("product_id", "")
     product_data = product_cache.get(product_id)
 
     if not product_data:
@@ -248,14 +351,13 @@ async def handle_narx_input(message: Message, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("price_ok:"))
 async def callback_price_ok(call: CallbackQuery):
-    product_id = call.data.split(":")[1]
+    product_id   = call.data.split(":")[1]
     product_data = product_cache.get(product_id)
     if not product_data:
         await call.answer("⚠️ Ma'lumot topilmadi.", show_alert=True)
         return
     await call.answer("✅ Tasdiqlandi")
     await do_upload(call, product_data, is_callback=True)
-
 
 @dp.callback_query(F.data.startswith("price_change:"))
 async def callback_price_change(call: CallbackQuery, state: FSMContext):
@@ -279,7 +381,7 @@ async def callback_price_change(call: CallbackQuery, state: FSMContext):
 async def handle_message(message: Message, state: FSMContext):
     text = message.text.strip()
 
-    # 1. MANUAL REJIM
+    # Manual rejim
     if any(text.lower().startswith(k) for k in ["nom:", "name:", "mahsulot:"]):
         processing_msg = await message.answer("✍️ Ma'lumotlar o'qilmoqda...")
         product_data = parse_manual_input(text)
@@ -299,15 +401,15 @@ async def handle_message(message: Message, state: FSMContext):
         await ask_price(message, product_data, state)
         return
 
-    # 2. HAVOLA REJIM
+    # Havola rejim
     url = extract_url(text)
     if not url:
         await message.answer(
-            "⚠️ Havola yoki ma'lumot topilmadi.\n\n"
-            "📎 AliExpress/1688 havolasi yuboring\n"
-            "📢 Kanal postini forward qiling\n"
-            "✍️ Yoki qo'lda:\n"
-            "<code>nom: Mahsulot nomi\nnarx: 850000</code>",
+            "⚠️ Nimani yubormoqchisiz?\n\n"
+            "🖼 Rasm yuborish\n"
+            "📎 AliExpress/1688 havolasi\n"
+            "📢 Kanal postini forward qilish\n"
+            "✍️ Qo'lda: <code>nom: ...\nnarx: ...</code>",
             parse_mode="HTML"
         )
         return
