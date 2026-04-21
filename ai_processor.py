@@ -13,7 +13,7 @@ GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions"
 # Matn uchun model
 TEXT_MODEL   = "llama-3.3-70b-versatile"
 # Rasm uchun model
-VISION_MODEL = "llama-3.2-11b-vision-preview"
+VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 
 async def _groq_text(prompt: str, max_tokens: int = 500) -> str | None:
