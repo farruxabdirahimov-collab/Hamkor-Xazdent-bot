@@ -1,28 +1,15 @@
-"""
-XazDentga mahsulot yuboruvchi modul.
-Bu fayl Hamkor-Xazdent-bot repo ga yangi fayl sifatida qo'shiladi.
-"""
-
 import os
 import aiohttp
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Bu 3 ta o'zgaruvchi Railway da sozlanadi
 XAZDENT_API_URL = os.getenv("XAZDENT_API_URL", "")
 PARTNER_TOKEN   = os.getenv("PARTNER_TOKEN", "")
 SELLER_UID      = os.getenv("SELLER_UID", "")
 
 
 async def upload_to_xazdent(product_data: dict) -> dict:
-    """
-    Mahsulotni XazDent katalogiga yuboradi.
-    Muvaffaqiyatli bo'lsa: {"ok": True, "article_code": "XZ00123", "product_id": 456}
-    Xatolik bo'lsa:        {"ok": False, "error": "..."}
-    """
-
-    # Sozlamalar to'liq emasmi tekshirish
     if not XAZDENT_API_URL:
         return {"ok": False, "error": "XAZDENT_API_URL sozlanmagan"}
     if not PARTNER_TOKEN:
@@ -30,7 +17,7 @@ async def upload_to_xazdent(product_data: dict) -> dict:
     if not SELLER_UID:
         return {"ok": False, "error": "SELLER_UID sozlanmagan"}
 
-    # Variantlarni to'g'ri formatga o'tkazish
+    # Variantlar
     xazdent_variants = []
     for v in product_data.get("variants", []):
         for val in v.get("values", []):
@@ -41,19 +28,34 @@ async def upload_to_xazdent(product_data: dict) -> dict:
                 "price":     float(product_data.get("price_uzs", 0))
             })
 
-    # XazDentga yuboriladigan ma'lumot
+    # Rasmlar — URL yoki file_id
+    images = product_data.get("images", [])
+
+    # Telegram kanal postidan kelgan bo'lsa file_id lar bor
+    # Bular XazDent ga file_id sifatida yuboriladi
+    photo_file_ids = product_data.get("photo_file_ids", [])
+
+    source = product_data.get("_source", "")
+    source_url = ""
+    if "aliexpress" in source or source in ["runParams", "json_ld", "meta_fallback"]:
+        source_url = f"https://www.aliexpress.com/item/{product_data.get('product_id', '')}.html"
+    elif "1688" in source:
+        source_url = f"https://detail.1688.com/offer/{product_data.get('product_id', '')}.html"
+
     payload = {
-        "uid":           int(SELLER_UID),
-        "name":          product_data.get("title", "")[:200],
-        "price":         float(product_data.get("price_uzs", 0)),
-        "unit":          "dona",
-        "description":   product_data.get("description", "")[:1000],
-        "images":        product_data.get("images", [])[:5],
-        "variants":      xazdent_variants[:10],
-        "delivery_type": "global",
-        "delivery_days": "15-30",
-        "installment":   0,
-        "source_url":    f"https://www.aliexpress.com/item/{product_data.get('product_id', '')}.html"
+        "uid":            int(SELLER_UID),
+        "name":           product_data.get("title", "")[:200],
+        "price":          float(product_data.get("price_uzs", 0)),
+        "unit":           "dona",
+        "description":    product_data.get("description", "")[:1000],
+        "images":         images[:5],
+        "photo_file_ids": photo_file_ids[:5],   # Telegram file_id lar
+        "variants":       xazdent_variants[:10],
+        "delivery_type":  "global" if "1688" in source or "aliexpress" in source else "local",
+        "delivery_days":  "15-30" if "global" in source else "2-3",
+        "installment":    0,
+        "source_url":     source_url,
+        "category":       product_data.get("category", ""),
     }
 
     try:
@@ -68,8 +70,7 @@ async def upload_to_xazdent(product_data: dict) -> dict:
                 timeout=aiohttp.ClientTimeout(total=30),
                 ssl=False
             ) as resp:
-                result = await resp.json()
-                return result
+                return await resp.json()
 
     except Exception as e:
         logger.error(f"XazDent yuklash xatolik: {e}")
