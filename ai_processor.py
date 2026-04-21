@@ -3,23 +3,23 @@ import json
 import logging
 import aiohttp
 import hashlib
+import base64
 
 logger = logging.getLogger(__name__)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+GEMINI_URL      = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
 # ============================================================
-# 1. AliExpress/1688 uchun kartochka (avvalgi funksiya)
+# 1. AliExpress/1688 uchun kartochka
 # ============================================================
 async def make_card(product_data: dict) -> str:
     if not GEMINI_API_KEY:
         return format_simple_card(product_data)
 
     prompt = f"""Sen XazDent dental marketplace uchun mahsulot kartochkasi yozuvchisan.
-
 Quyidagi xom ma'lumotdan o'zbekcha professional kartochka yasa.
-Javobni FAQAT JSON formatda ber, boshqa hech narsa yozma:
+Javobni FAQAT JSON formatda ber:
 
 {{
   "name_uz": "O'zbekcha qisqa nom (20-50 belgi)",
@@ -42,53 +42,43 @@ XOM MA'LUMOT:
                 timeout=aiohttp.ClientTimeout(total=30),
             ) as resp:
                 data = await resp.json()
-
         text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
         text = text.replace("```json", "").replace("```", "").strip()
         ai = json.loads(text)
         return format_full_card(product_data, ai)
-
     except Exception as e:
         logger.error(f"Gemini xatolik: {e}")
         return format_simple_card(product_data)
 
 
 # ============================================================
-# 2. Telegram kanal posti uchun kartochka — YANGI
+# 2. Telegram kanal posti uchun kartochka
 # ============================================================
 async def make_card_from_post(post_data: dict) -> dict | None:
-    """
-    Telegram kanal postidan mahsulot ma'lumotlarini ajratib oladi.
-    post_data = {"text": "...", "photo_file_ids": ["file_id_1", ...]}
-    """
-    post_text = post_data.get("text", "").strip()
+    post_text      = post_data.get("text", "").strip()
     photo_file_ids = post_data.get("photo_file_ids", [])
 
     if not post_text and not photo_file_ids:
         return None
 
     if not GEMINI_API_KEY:
-        # AI siz — matndan minimal ma'lumot
         return _parse_post_simple(post_text, photo_file_ids)
 
     prompt = f"""Sen dental marketplace uchun ishlaydigan AI assistantsan.
-
 Quyidagi Telegram kanal postidan mahsulot ma'lumotlarini ajrat.
 Javobni FAQAT JSON formatda ber:
 
 {{
-  "name_uz": "Mahsulot nomi o'zbekcha (20-60 belgi)",
+  "name_uz": "Mahsulot nomi o'zbekcha",
   "description_uz": "3-5 jumlali tavsif stomatologlar uchun",
-  "category_hint": "Kategoriya (Stomatologik asboblar / Implant materiallari / Dezinfeksiya / Rentgen / Boshqa)",
+  "category_hint": "Kategoriya",
   "price_uzs": 0
 }}
 
-Agar narx matndа bo'lsa — price_uzs ga yoz (faqat raqam, so'mda).
-Agar narx yo'q bo'lsa — 0 qoldir.
-Agar matn o'zbekcha/ruscha bo'lsa — o'zbekchaga tarjima qil.
+Agar narx matndа bo'lsa price_uzs ga yoz. Yo'q bo'lsa 0 qoldir.
 
-KANAL POSTI MATNI:
-{post_text or "(Matn yo'q, faqat rasm)"}"""
+KANAL POSTI:
+{post_text or "(Faqat rasm)"}"""
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -102,34 +92,28 @@ KANAL POSTI MATNI:
                 timeout=aiohttp.ClientTimeout(total=30),
             ) as resp:
                 data = await resp.json()
-
         text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
         text = text.replace("```json", "").replace("```", "").strip()
-        ai = json.loads(text)
+        ai   = json.loads(text)
 
-        # product_id — post matnidan hash
         product_id = "post_" + hashlib.md5(post_text.encode()).hexdigest()[:8]
-
-        price_uzs = int(ai.get("price_uzs", 0))
+        price_uzs  = int(ai.get("price_uzs", 0))
 
         product_data = {
-            "product_id":   product_id,
-            "title":        ai.get("name_uz", "Mahsulot"),
-            "description":  ai.get("description_uz", ""),
-            "category":     ai.get("category_hint", ""),
-            "images":       [],                    # URL yo'q, file_id bor
-            "photo_file_ids": photo_file_ids,      # Telegram file_id lar
-            "price_uzs":    price_uzs,
-            "price_usd":    round(price_uzs / 12800, 2),
-            "price_cny":    0,
-            "variants":     [],
-            "min_order":    1,
-            "_source":      "telegram_post",
+            "product_id":     product_id,
+            "title":          ai.get("name_uz", "Mahsulot"),
+            "description":    ai.get("description_uz", ""),
+            "category":       ai.get("category_hint", ""),
+            "images":         [],
+            "photo_file_ids": photo_file_ids,
+            "price_uzs":      price_uzs,
+            "price_usd":      round(price_uzs / 12800, 2),
+            "price_cny":      0,
+            "variants":       [],
+            "min_order":      1,
+            "_source":        "telegram_post",
         }
-
-        # Kartochka matni
         product_data["card_text"] = format_post_card(product_data)
-
         return product_data
 
     except Exception as e:
@@ -137,25 +121,117 @@ KANAL POSTI MATNI:
         return _parse_post_simple(post_text, photo_file_ids)
 
 
-def _parse_post_simple(text: str, photo_file_ids: list) -> dict:
-    """AI siz — matndan minimal ma'lumot"""
-    import hashlib
-    product_id = "post_" + hashlib.md5(text.encode()).hexdigest()[:8]
-    return {
-        "product_id":     product_id,
-        "title":          text[:60] if text else "Mahsulot",
-        "description":    text[:500] if text else "",
-        "category":       "",
-        "images":         [],
-        "photo_file_ids": photo_file_ids,
-        "price_uzs":      0,
-        "price_usd":      0,
-        "price_cny":      0,
-        "variants":       [],
-        "min_order":      1,
-        "_source":        "telegram_post_simple",
-        "card_text":      f"📦 <b>{text[:60]}</b>\n\n{text[:300]}" if text else "📦 Mahsulot",
+# ============================================================
+# 3. RASM dan kartochka — YANGI
+# ============================================================
+async def make_card_from_image(image_bytes: bytes, filename: str = "photo.jpg") -> dict | None:
+    """
+    Rasm yuborilganda Gemini Vision rasmni o'qiydi va mahsulot
+    ma'lumotlarini ajratib oladi.
+    """
+    if not GEMINI_API_KEY:
+        logger.warning("GEMINI_API_KEY yo'q")
+        return None
+
+    # Rasmni base64 ga aylantiramiz
+    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+
+    # Fayl kengaytmasidan media type aniqlaymiz
+    ext = filename.lower().split(".")[-1]
+    media_type_map = {
+        "jpg": "image/jpeg", "jpeg": "image/jpeg",
+        "png": "image/png",  "webp": "image/webp",
     }
+    media_type = media_type_map.get(ext, "image/jpeg")
+
+    prompt = """Sen dental marketplace (stomatologiya mahsulotlari) uchun ishlaydigan AI assistantsan.
+
+Bu rasmda stomatologiya mahsuloti ko'rinmoqda.
+
+Rasmdan quyidagilarni ajrat va FAQAT JSON formatda ber:
+
+{
+  "name_uz": "Mahsulot nomi o'zbekcha (masalan: COXO 20:1 to'g'ri nakonechnik)",
+  "brand": "Brend nomi (masalan: COXO, Osstem, NSK)",
+  "model": "Model raqami (masalan: CX23508)",
+  "shop_name": "Do'kon yoki kompaniya nomi agar rasmda ko'rinsa, aks holda bo'sh qoldir",
+  "description_uz": "3-5 jumlali professional tavsif stomatologlar uchun",
+  "category_hint": "Kategoriya (Nakonechniklar / Implant asboblari / Dezinfeksiya / Rentgen / Boshqa)",
+  "price_uzs": 0,
+  "price_currency": "noaniq",
+  "has_other_shop_logo": false
+}
+
+MUHIM:
+- Agar rasmda narx yozilgan bo'lsa — price_uzs ga yoz (faqat raqam)
+- Agar narx valyutasi noaniq bo'lsa — price_currency ga "noaniq" yoz
+- Agar rasmda boshqa do'kon/kompaniya logosi bo'lsa — has_other_shop_logo: true
+- Agar mahsulot stomatologiya bilan bog'liq bo'lmasa — barcha maydonlarni bo'sh qoldir"""
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{GEMINI_URL}?key={GEMINI_API_KEY}",
+                headers={"Content-Type": "application/json"},
+                json={
+                    "contents": [{
+                        "parts": [
+                            {
+                                "inline_data": {
+                                    "mime_type": media_type,
+                                    "data": image_b64
+                                }
+                            },
+                            {"text": prompt}
+                        ]
+                    }],
+                    "generationConfig": {"temperature": 0.2, "maxOutputTokens": 600}
+                },
+                timeout=aiohttp.ClientTimeout(total=40),
+            ) as resp:
+                data = await resp.json()
+
+        text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        text = text.replace("```json", "").replace("```", "").strip()
+        ai   = json.loads(text)
+
+        # Dental mahsulot emasmi?
+        if not ai.get("name_uz") and not ai.get("brand"):
+            return {"_not_dental": True}
+
+        product_id = "img_" + hashlib.md5(image_bytes[:100]).hexdigest()[:8]
+        price_uzs  = int(ai.get("price_uzs", 0))
+
+        # Nom: brend + model + nom
+        full_name = ai.get("name_uz", "")
+        brand     = ai.get("brand", "")
+        model     = ai.get("model", "")
+
+        product_data = {
+            "product_id":         product_id,
+            "title":              full_name,
+            "brand":              brand,
+            "model":              model,
+            "shop_name":          ai.get("shop_name", ""),
+            "has_other_shop_logo":ai.get("has_other_shop_logo", False),
+            "description":        ai.get("description_uz", ""),
+            "category":           ai.get("category_hint", ""),
+            "images":             [],
+            "photo_file_ids":     [],  # bot.py da to'ldiriladi
+            "price_uzs":          price_uzs,
+            "price_usd":          round(price_uzs / 12800, 2),
+            "price_cny":          0,
+            "price_currency":     ai.get("price_currency", "noaniq"),
+            "variants":           [],
+            "min_order":          1,
+            "_source":            "image_vision",
+        }
+        product_data["card_text"] = format_image_card(product_data)
+        return product_data
+
+    except Exception as e:
+        logger.error(f"make_card_from_image xatolik: {e}")
+        return None
 
 
 # ============================================================
@@ -165,12 +241,10 @@ def format_full_card(raw: dict, ai: dict) -> str:
     price_uzs = raw.get("price_uzs", 0)
     price_cny = raw.get("price_cny", 0)
     price_usd = raw.get("price_usd", 0)
-
     variants_text = ""
     for v in raw.get("variants", [])[:4]:
         values = ", ".join(v.get("values", [])[:5])
         variants_text += f"\n  • {v.get('name', '')}: {values}"
-
     return (
         f"✅ <b>{ai.get('name_uz', raw.get('title', 'Mahsulot'))}</b>\n"
         f"🏷 <i>{ai.get('category_hint', '')}</i>\n\n"
@@ -183,7 +257,6 @@ def format_full_card(raw: dict, ai: dict) -> str:
         f"🔢 <b>Artikul:</b> <code>{raw.get('product_id', '—')}</code>"
     )
 
-
 def format_post_card(data: dict) -> str:
     return (
         f"✅ <b>{data.get('title', 'Mahsulot')}</b>\n"
@@ -192,6 +265,17 @@ def format_post_card(data: dict) -> str:
         f"🔢 <b>ID:</b> <code>{data.get('product_id', '—')}</code>"
     )
 
+def format_image_card(data: dict) -> str:
+    brand = data.get("brand", "")
+    model = data.get("model", "")
+    brand_line = f"🏭 <b>Brend:</b> {brand}" + (f" | <b>Model:</b> {model}" if model else "") if brand else ""
+    return (
+        f"✅ <b>{data.get('title', 'Mahsulot')}</b>\n"
+        f"🏷 <i>{data.get('category', '')}</i>\n"
+        f"{brand_line}\n\n"
+        f"📝 <b>Tavsif:</b>\n{data.get('description', '')}\n\n"
+        f"🔢 <b>ID:</b> <code>{data.get('product_id', '—')}</code>"
+    )
 
 def format_simple_card(raw: dict) -> str:
     return (
@@ -200,3 +284,14 @@ def format_simple_card(raw: dict) -> str:
         f"💰 {raw.get('price_uzs', 0):,} so'm\n"
         f"🔢 <code>{raw.get('product_id', '—')}</code>"
     )
+
+def _parse_post_simple(text: str, photo_file_ids: list) -> dict:
+    product_id = "post_" + hashlib.md5((text or "x").encode()).hexdigest()[:8]
+    return {
+        "product_id": product_id, "title": text[:60] if text else "Mahsulot",
+        "description": text[:500] if text else "", "category": "",
+        "images": [], "photo_file_ids": photo_file_ids,
+        "price_uzs": 0, "price_usd": 0, "price_cny": 0,
+        "variants": [], "min_order": 1, "_source": "telegram_post_simple",
+        "card_text": f"📦 <b>{text[:60]}</b>\n\n{text[:300]}" if text else "📦 Mahsulot",
+    }
