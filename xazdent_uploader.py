@@ -1,6 +1,7 @@
 import os
 import aiohttp
 import logging
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -9,7 +10,18 @@ PARTNER_TOKEN   = os.getenv("PARTNER_TOKEN", "")
 SELLER_UID      = os.getenv("SELLER_UID", "")
 
 
-async def upload_to_xazdent(product_data: dict) -> dict:
+async def download_telegram_photo(bot, file_id: str) -> bytes | None:
+    """Telegram dan rasmni bytes sifatida yuklab olish"""
+    try:
+        file = await bot.get_file(file_id)
+        file_bytes = await bot.download_file(file.file_path)
+        return file_bytes.read()
+    except Exception as e:
+        logger.error(f"Telegram rasm yuklab olish xatolik: {e}")
+        return None
+
+
+async def upload_to_xazdent(product_data: dict, bot=None) -> dict:
     if not XAZDENT_API_URL:
         return {"ok": False, "error": "XAZDENT_API_URL sozlanmagan"}
     if not PARTNER_TOKEN:
@@ -28,13 +40,22 @@ async def upload_to_xazdent(product_data: dict) -> dict:
                 "price":     float(product_data.get("price_uzs", 0))
             })
 
-    # Rasmlar — URL yoki file_id
-    images = product_data.get("images", [])
+    # URL rasmlar (AliExpress/1688 dan)
+    images = product_data.get("images", [])[:5]
 
-    # Telegram kanal postidan kelgan bo'lsa file_id lar bor
-    # Bular XazDent ga file_id sifatida yuboriladi
+    # Base64 rasmlar (Telegram file_id lardan)
+    photo_base64 = []
     photo_file_ids = product_data.get("photo_file_ids", [])
 
+    if photo_file_ids and bot:
+        for file_id in photo_file_ids[:5]:
+            img_bytes = await download_telegram_photo(bot, file_id)
+            if img_bytes:
+                b64 = base64.b64encode(img_bytes).decode("utf-8")
+                photo_base64.append(b64)
+                logger.info(f"Rasm base64 tayyor: {len(img_bytes)} bytes")
+
+    # Source URL
     source = product_data.get("_source", "")
     source_url = ""
     if "aliexpress" in source or source in ["runParams", "json_ld", "meta_fallback"]:
@@ -43,19 +64,19 @@ async def upload_to_xazdent(product_data: dict) -> dict:
         source_url = f"https://detail.1688.com/offer/{product_data.get('product_id', '')}.html"
 
     payload = {
-        "uid":            int(SELLER_UID),
-        "name":           product_data.get("title", "")[:200],
-        "price":          float(product_data.get("price_uzs", 0)),
-        "unit":           "dona",
-        "description":    product_data.get("description", "")[:1000],
-        "images":         images[:5],
-        "photo_file_ids": photo_file_ids[:5],   # Telegram file_id lar
-        "variants":       xazdent_variants[:10],
-        "delivery_type":  "global" if "1688" in source or "aliexpress" in source else "local",
-        "delivery_days":  "15-30" if "global" in source else "2-3",
-        "installment":    0,
-        "source_url":     source_url,
-        "category":       product_data.get("category", ""),
+        "uid":           int(SELLER_UID),
+        "name":          product_data.get("title", "")[:200],
+        "price":         float(product_data.get("price_uzs", 0)),
+        "unit":          "dona",
+        "description":   product_data.get("description", "")[:1000],
+        "images":        images,           # URL rasmlar
+        "photo_base64":  photo_base64,     # Telegram rasmlar base64
+        "variants":      xazdent_variants[:10],
+        "delivery_type": "global" if source in ["runParams", "json_ld", "1688_pattern"] else "local",
+        "delivery_days": "15-30" if source in ["runParams", "json_ld", "1688_pattern"] else "2-3",
+        "installment":   0,
+        "source_url":    source_url,
+        "category":      product_data.get("category", ""),
     }
 
     try:
@@ -67,7 +88,7 @@ async def upload_to_xazdent(product_data: dict) -> dict:
                     "X-Partner-Token": PARTNER_TOKEN,
                     "Content-Type":    "application/json"
                 },
-                timeout=aiohttp.ClientTimeout(total=30),
+                timeout=aiohttp.ClientTimeout(total=60),
                 ssl=False
             ) as resp:
                 return await resp.json()
