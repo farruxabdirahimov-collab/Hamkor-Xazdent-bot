@@ -505,6 +505,7 @@ async def handle_photo(message: Message, state: FSMContext):
             return
 
         product_data["photo_file_ids"] = [file_id]
+        product_data["seller_uid"] = message.from_user.id
         await bot.delete_message(chat_id=message.chat.id, message_id=processing_msg.message_id)
 
         card_text = product_data.get("card_text", "")
@@ -587,6 +588,7 @@ async def handle_forward(message: Message, state: FSMContext):
         )
         return
 
+    product_data["seller_uid"] = message.from_user.id
     card_text = product_data.get("card_text", "")
     await message.answer(card_text, parse_mode="HTML")
     await ask_price(message, product_data, state)
@@ -677,6 +679,7 @@ async def handle_message(message: Message, state: FSMContext):
             chat_id=message.chat.id, message_id=processing_msg.message_id)
         card_text = await make_card(product_data)
         product_data["card_text"] = card_text
+        product_data["seller_uid"] = message.from_user.id
         await bot.delete_message(chat_id=message.chat.id, message_id=processing_msg.message_id)
         await send_card_with_photos(message, product_data, card_text)
         await ask_price(message, product_data, state)
@@ -730,6 +733,7 @@ async def handle_message(message: Message, state: FSMContext):
             chat_id=message.chat.id, message_id=processing_msg.message_id)
         card_text = await make_card(product_data)
         product_data["card_text"] = card_text
+        product_data["seller_uid"] = message.from_user.id
         await bot.delete_message(chat_id=message.chat.id, message_id=processing_msg.message_id)
         await send_card_with_photos(message, product_data, card_text)
         await ask_price(message, product_data, state)
