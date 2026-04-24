@@ -63,8 +63,13 @@ async def upload_to_xazdent(product_data: dict, bot=None) -> dict:
     elif "1688" in source:
         source_url = f"https://detail.1688.com/offer/{product_data.get('product_id', '')}.html"
 
+    # uid — botga kirgan sotuvchining o'z Telegram ID si
+    seller_uid = product_data.get("seller_uid") or SELLER_UID
+    if not seller_uid:
+        return {"ok": False, "error": "Sotuvchi ID topilmadi"}
+
     payload = {
-        "uid":           int(SELLER_UID),
+        "uid":           int(seller_uid),
         "name":          product_data.get("title", "")[:200],
         "price":         float(product_data.get("price_uzs", 0)),
         "unit":          "dona",
