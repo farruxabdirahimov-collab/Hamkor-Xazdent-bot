@@ -29,16 +29,30 @@ async def upload_to_xazdent(product_data: dict, bot=None) -> dict:
     if not SELLER_UID:
         return {"ok": False, "error": "SELLER_UID sozlanmagan"}
 
-    # Variantlar
+    # Variantlar — 2 xil format qo'llab-quvvatlanadi:
+    # 1. price_list_handler dan: [{"size_name": "1ml", "article": "", "stock": 999, "price": 540}]
+    # 2. scraper dan: [{"name": "Razmer", "values": ["S", "M", "L"]}]
+    raw_variants = product_data.get("variants", [])
     xazdent_variants = []
-    for v in product_data.get("variants", []):
-        for val in v.get("values", []):
+
+    for v in raw_variants:
+        if "size_name" in v:
+            # price_list format — to'g'ridan ishlatamiz
             xazdent_variants.append({
-                "size_name": f"{v.get('name', '')}: {val}",
-                "article":   f"AE-{product_data.get('product_id', '')}-{val}",
-                "stock":     999,
-                "price":     float(product_data.get("price_uzs", 0))
+                "size_name": str(v.get("size_name", "")),
+                "article":   str(v.get("article", "")),
+                "stock":     int(v.get("stock", 999)),
+                "price":     float(v.get("price", product_data.get("price_uzs", 0))),
             })
+        elif "values" in v:
+            # scraper format — variantlarga ajratamiz
+            for val in v.get("values", []):
+                xazdent_variants.append({
+                    "size_name": f"{v.get('name', '')}: {val}",
+                    "article":   f"AE-{product_data.get('product_id', '')}-{val}",
+                    "stock":     999,
+                    "price":     float(product_data.get("price_uzs", 0)),
+                })
 
     # URL rasmlar (AliExpress/1688 dan)
     images = product_data.get("images", [])[:5]
