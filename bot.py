@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from scraper import scrape_aliexpress, parse_manual_input
 from ai_processor import make_card, make_card_from_post, make_card_from_image
 from xazdent_uploader import upload_to_xazdent
+from price_list_handler import process_price_list
 
 load_dotenv()
 
@@ -35,7 +36,12 @@ product_cache = {}
 seller_sessions = {}
 
 class NarxState(StatesGroup):
-    kutish = State()
+    kutish        = State()   # Narx kutish
+    info_kutish   = State()   # Rasm uchun nom+narx+tavsif kutish
+
+class PriceListState(StatesGroup):
+    tasdiqlash = State()  # Price-list yuklashni tasdiqlash
+    narx_kutish = State() # Narxsiz mahsulot narxini kutish
 
 ALIEXPRESS_DOMAINS = [
     "aliexpress.com", "aliexpress.ru", "a.aliexpress.com",
@@ -597,158 +603,81 @@ async def handle_forward(message: Message, state: FSMContext):
 # ============================================================
 # NARX HOLATI
 # ============================================================
-@dp.message(NarxState.kutish)
-async def handle_narx_input(message: Message, state: FSMContext):
+@dp.message(NarxState.info_kutish)
+async def handle_image_info(message: Message, state: FSMContext):
+    """Rasm yuborilgandan keyin nom/narx/tavsif kutish"""
     import re
-    digits = re.sub(r"[^\d]", "", message.text.strip())
-    if not digits:
-        await message.answer("⚠️ Faqat raqam yozing.\n<i>Masalan: 850000</i>", parse_mode="HTML")
-        return
-
-    price_uzs    = int(digits)
-    data         = await state.get_data()
-    product_id   = data.get("product_id", "")
+    text = message.text.strip()
+    data = await state.get_data()
+    product_id = data.get("product_id", "")
     product_data = product_cache.get(product_id)
 
     if not product_data:
         await state.clear()
-        await message.answer("⚠️ Ma'lumot topilmadi. Qayta yuboring.")
+        await message.answer("⚠️ Ma'lumot topilmadi. Rasmni qayta yuboring.")
         return
 
-    product_data["price_uzs"] = price_uzs
-    product_data["price_usd"] = round(price_uzs / 12800, 2)
-    product_cache[product_id] = product_data
+    # nom: ... narx: ... tavsif: ... formatini parse qilish
+    name = ""
+    price_uzs = 0
+    description = ""
 
-    await state.clear()
-    await message.answer(f"✅ Narx: <b>{format_price(price_uzs)} so'm</b>", parse_mode="HTML")
-    await do_upload(message, product_data)
+    for line in text.split("\n"):
+        line = line.strip()
+        if ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        key = key.strip().lower()
+        val = val.strip()
+        if key in ["nom", "name", "nomi"]:
+            name = val
+        elif key in ["narx", "price", "narxi"]:
+            digits = re.sub(r"[^\d]", "", val)
+            if digits:
+                price_uzs = int(digits)
+        elif key in ["tavsif", "description"]:
+            description = val
 
-@dp.callback_query(F.data.startswith("price_ok:"))
-async def callback_price_ok(call: CallbackQuery):
-    product_id   = call.data.split(":")[1]
-    product_data = product_cache.get(product_id)
-    if not product_data:
-        await call.answer("⚠️ Ma'lumot topilmadi.", show_alert=True)
-        return
-    await call.answer("✅ Tasdiqlandi")
-    await do_upload(call, product_data, is_callback=True)
-
-@dp.callback_query(F.data.startswith("price_change:"))
-async def callback_price_change(call: CallbackQuery, state: FSMContext):
-    product_id = call.data.split(":")[1]
-    if product_id not in product_cache:
-        await call.answer("⚠️ Ma'lumot topilmadi.", show_alert=True)
-        return
-    await call.answer()
-    await state.set_state(NarxState.kutish)
-    await state.update_data(product_id=product_id)
-    await call.message.edit_text(
-        "✏️ Yangi narxni so'mda yozing:\n<i>Masalan: 850000</i>", parse_mode="HTML"
-    )
-
-
-# ============================================================
-# MATN VA HAVOLA
-# ============================================================
-@dp.message(F.text)
-async def handle_message(message: Message, state: FSMContext):
-    uid  = message.from_user.id
-    text = message.text.strip()
-
-    # Admin buyruqlarini o'tkazib yuborish
-    if text.startswith("/"):
-        return
-
-    # Ruxsat tekshirish
-    if not is_admin(uid) and uid not in seller_sessions:
-        await message.answer("⛔ Avval /start bosing va ruxsatni tekshiring.")
-        return
-
-    # Manual rejim
-    if any(text.lower().startswith(k) for k in ["nom:", "name:", "mahsulot:"]):
-        processing_msg = await message.answer("✍️ Ma'lumotlar o'qilmoqda...")
-        product_data = parse_manual_input(text)
-        if not product_data:
-            await bot.edit_message_text(
-                "⚠️ Format noto'g'ri.\n\n"
-                "<code>nom: Mahsulot nomi\nnarx: 850000\ntavsif: Tavsif</code>",
-                chat_id=message.chat.id, message_id=processing_msg.message_id, parse_mode="HTML"
-            )
-            return
-        await bot.edit_message_text("🤖 AI kartochka tayyorlamoqda...",
-            chat_id=message.chat.id, message_id=processing_msg.message_id)
-        card_text = await make_card(product_data)
-        product_data["card_text"] = card_text
-        product_data["seller_uid"] = message.from_user.id
-        await bot.delete_message(chat_id=message.chat.id, message_id=processing_msg.message_id)
-        await send_card_with_photos(message, product_data, card_text)
-        await ask_price(message, product_data, state)
-        return
-
-    # Havola rejim
-    url = extract_url(text)
-    if not url:
+    if not name:
         await message.answer(
-            "⚠️ Nimani yubormoqchisiz?\n\n"
-            "🖼 Rasm yuborish\n"
-            "📎 AliExpress/1688 havolasi\n"
-            "📢 Kanal postini forward qilish\n"
-            "✍️ Qo'lda: <code>nom: ...\nnarx: ...</code>",
+            "⚠️ <b>Nom kiritilmadi.</b>\n\nQuyidagicha yozing:\n<code>nom: Mahsulot nomi\nnarx: 850000</code>",
             parse_mode="HTML"
         )
         return
 
-    if not is_aliexpress_link(url):
-        processing_msg = await message.answer("🔍 Havola tekshirilmoqda...")
-        resolved = await resolve_short_url(url)
-        if not is_aliexpress_link(resolved):
-            await bot.edit_message_text(
-                "⚠️ Faqat <b>AliExpress</b> va <b>1688</b> havolalarini qabul qilaman.",
-                chat_id=message.chat.id, message_id=processing_msg.message_id, parse_mode="HTML"
-            )
-            return
-        url = resolved
+    # product_data ni to'ldirish
+    product_data["title"]       = name
+    product_data["description"] = description
+    product_data["price_uzs"]   = price_uzs
+    product_data["price_usd"]   = round(price_uzs / 12800, 2)
+    product_cache[product_id]   = product_data
+
+    await state.clear()
+
+    if price_uzs > 0:
+        # Narx kiritilgan — tasdiqlash so'raymiz
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="✅ Ha, to'g'ri", callback_data=f"price_ok:{product_id}"),
+            InlineKeyboardButton(text="✏️ O'zgartirish", callback_data=f"price_change:{product_id}"),
+        ]])
+        await message.answer(
+            f"✅ <b>{name}</b>\n\n💰 Narx: <b>{format_price(price_uzs)} so'm</b>\n\nTo'g'rimi?",
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
     else:
-        processing_msg = await message.answer("⏳ Mahsulot yuklanmoqda...")
-
-    try:
-        if any(d in url for d in ["ali.click", "alx.click"]):
-            await bot.edit_message_text("🔗 Havola ochilmoqda...",
-                chat_id=message.chat.id, message_id=processing_msg.message_id)
-            url = await resolve_short_url(url)
-
-        await bot.edit_message_text("🔍 Sahifa o'qilmoqda...",
-            chat_id=message.chat.id, message_id=processing_msg.message_id)
-        product_data = await scrape_aliexpress(url)
-
-        if not product_data:
-            await bot.edit_message_text(
-                "❌ Ma'lumot olishda xatolik.\n\nQo'lda kiritib ko'ring:\n"
-                "<code>nom: Mahsulot nomi\nnarx: 850000</code>",
-                chat_id=message.chat.id, message_id=processing_msg.message_id, parse_mode="HTML"
-            )
-            return
-
-        await bot.edit_message_text("🤖 AI kartochka tayyorlamoqda...",
-            chat_id=message.chat.id, message_id=processing_msg.message_id)
-        card_text = await make_card(product_data)
-        product_data["card_text"] = card_text
-        product_data["seller_uid"] = message.from_user.id
-        await bot.delete_message(chat_id=message.chat.id, message_id=processing_msg.message_id)
-        await send_card_with_photos(message, product_data, card_text)
-        await ask_price(message, product_data, state)
-
-    except Exception as e:
-        logger.error(f"Xatolik: {e}")
-        try:
-            await bot.edit_message_text(f"❌ Xatolik: {str(e)[:200]}",
-                chat_id=message.chat.id, message_id=processing_msg.message_id)
-        except:
-            await message.answer(f"❌ Xatolik: {str(e)[:200]}")
+        # Narx kiritilmagan — so'raymiz
+        await state.set_state(NarxState.kutish)
+        await state.update_data(product_id=product_id)
+        await message.answer(
+            f"✅ <b>{name}</b>\n\n💰 Narx: <b>{format_price(price_uzs)} so'm</b>\n\nTo'g'rimi?",
+            parse_mode="HTML"
+        )
 
 
 async def main():
     logger.info("Bot ishga tushdi...")
+    register_pricelist_handlers(dp, bot, product_cache, upload_to_xazdent, is_admin, seller_sessions)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
