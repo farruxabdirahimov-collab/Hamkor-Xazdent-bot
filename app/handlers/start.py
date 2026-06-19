@@ -163,7 +163,18 @@ async def reg_terms_ok(call: CallbackQuery, state: FSMContext):
     await state.clear()
     u = await get_user(uid)
     await _ensure_shop(uid, u)
-    await call.message.answer(f"✅ *Do'koningiz ochildi!*\n\n🏪 {name}\n📍 {region}")
+    await call.message.answer(
+        f"✅ *Do'koningiz ochildi!* 🎉\n\n"
+        f"🏪 {name}\n📍 {region}\n\n"
+        f"Mahsulotingizni butun O'zbekiston bo'ylab stomatolog va klinikalarga "
+        f"yetkazamiz. 📸 Mahsulotni *chiroyli holda bir marta* yuklang — doimiy soting!\n\n"
+        f"*Qisqa qo'llanma:*\n"
+        f"1️⃣ ➕ Mahsulot qo'shing (chiroyli surat + aniq narx)\n"
+        f"2️⃣ 🔔 Buyurtma kelganda xabar olasiz\n"
+        f"3️⃣ ✅ Qabul qilib, yetkazib bering\n"
+        f"4️⃣ ⭐ Reyting yig'ib, ko'proq soting",
+        reply_markup=ik([ib("📖 To'liq qo'llanma", "seller_guide")]),
+    )
     await _show_seller_menu(call.message if hasattr(call, "message") else call, u)
     # Adminlarga xabar
     for aid in ADMIN_IDS:
@@ -210,6 +221,26 @@ async def seller_help(msg: Message):
         "🔔 *Buyurtmalar* — faol buyurtmalaringiz\n"
         "💰 *Hisobim* — balans va to'ldirish\n"
         "⚙️ *Profil* — ma'lumotlaringiz\n\n"
-        "Savol bo'lsa adminlarga murojaat qiling."
+        "Savol bo'lsa adminlarga murojaat qiling.",
+        reply_markup=ik([ib("📖 To'liq qo'llanma", "seller_guide")]),
     )
+
+
+@router.callback_query(F.data == "seller_guide")
+async def cb_seller_guide(call: CallbackQuery):
+    await call.message.answer(
+        "📖 *To'liq qo'llanma — qanday sotish kerak*\n\n"
+        "*1. Mahsulot qo'shish*\n"
+        "➕ \"Mahsulot qo'shish\" → nom, narx, miqdor. *Chiroyli, aniq surat* yuklang — "
+        "xaridor avval rasmni ko'radi. Narxni to'g'ri kiriting.\n\n"
+        "*2. Buyurtma*\n"
+        "🔔 Xaridor buyurtma bersa, sizga shu bot orqali xabar keladi: mahsulot, miqdor, "
+        "manzil, telefon. Tez *qabul qiling* yoki *rad eting*.\n\n"
+        "*3. Yetkazish*\n"
+        "✅ Qabul → 📦 Tayyorlash → 🚚 Jo'natish → ✅ Yetkazildi. Har bosqichda xaridor xabardor bo'ladi.\n\n"
+        "*4. Reyting*\n"
+        "⭐ O'z vaqtida yetkazsangiz yaxshi reyting olasiz — ko'proq buyurtma keladi.\n\n"
+        "💡 *Maslahat:* mahsulotni bir marta sifatli yuklang — u doimiy ko'rinib turadi va sotiladi.",
+    )
+    await call.answer()
 
