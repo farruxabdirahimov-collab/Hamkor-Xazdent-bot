@@ -34,6 +34,12 @@ async def _on_error(event):
 async def main():
     await get_pool()   # umumiy bazaga ulanishni tekshiramiz
     dp.include_router(router)
+    # hamkor.xazdent.uz uchun web-proxy (port 8080) — sotuvchi botga parallel
+    try:
+        from proxy import start_web
+        await start_web()
+    except Exception as e:
+        log.error(f"web proxy ishga tushmadi: {e}")
     log.info("🏪 XazDent SOTUVCHI bot ishga tushdi!")
     xlog.notify("🏪 XazDent Sotuvchi bot ishga tushdi", "INFO")
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
