@@ -22,6 +22,20 @@ from app import logger as xlog
 
 log = logging.getLogger(__name__)
 
+WELCOME_INTRO = (
+    "🏪 *Xush kelibsiz!*\n\n"
+    "Butun O'zbekiston bo'ylab mahsulotingiz *stomatologlar va klinikalarga* "
+    "yetib borishini biz ta'minlaymiz.\n\n"
+    "Siz mahsulotingizni *bir marta chiroyli suratda yuklang* — va *doimiy soting*.\n\n"
+    "📋 *Qanday ishlaydi:*\n"
+    "1️⃣ Do'kon ochasiz (bir marta)\n"
+    "2️⃣ Mahsulot qo'shasiz — nom, narx, rasm\n"
+    "3️⃣ Mahsulotlaringiz katalogda paydo bo'ladi\n"
+    "4️⃣ Buyurtmalar shu yerga bildirishnoma bo'lib keladi\n\n"
+    "💡 Mahsulotlaringiz Telegram kanalda bo'lsa — ilovadagi *“🤖 AI import”* "
+    "orqali AI ularni avtomatik qo'shib beradi (siz narx/sonni tasdiqlaysiz)."
+)
+
 
 async def _ensure_shop(uid, u):
     """Sotuvchi uchun do'kon bo'lmasa yaratamiz (active)."""
@@ -68,15 +82,18 @@ async def cmd_start(msg: Message, state: FSMContext):
 
     # Profil to'liq (xaridor botda ham ro'yxatdan o'tgan bo'lishi mumkin) → menyu
     if u and u.get("phone") and u.get("region"):
+        had_shop = await db_get("SELECT 1 AS x FROM shops WHERE owner_id=?", (uid,))
         await _ensure_shop(uid, u)
+        if not had_shop:   # sotuvchi botga BIRINCHI marta kirishi — onboarding xabari
+            await msg.answer(WELCOME_INTRO)
         await _show_seller_menu(msg, u)
         return
 
-    # Aks holda — qisqa onboarding
+    # Aks holda — qisqa onboarding (birinchi marta): avval tushuntiramiz
+    await msg.answer(WELCOME_INTRO)
     await state.set_state(RegState.name)
     await msg.answer(
-        "🏪 *XazDent — Sotuvchi paneli*\n\n"
-        "Sotuvchi sifatida ro'yxatdan o'tamiz.\n\n"
+        "Boshlash uchun ro'yxatdan o'tamiz 👇\n\n"
         "Do'kon nomini yoki ism-familiyangizni kiriting:\n"
         "_Masalan: DentalPlus — yoki — Alisher Karimov_",
         reply_markup=ReplyKeyboardRemove(),
