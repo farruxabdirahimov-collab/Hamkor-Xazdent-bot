@@ -268,6 +268,64 @@ async def checkout_pay_cod(call: CallbackQuery, state: FSMContext):
     except Exception as e:
         log.error(f"Sotuvchiga xabar: {e}")
 
+# ── Web savat buyurtmasi: sotuvchi tasdiqlaydi/rad etadi (xaridorga buyer_bot orqali) ──
+@router.callback_query(F.data.startswith("co_confirm_"))
+async def hk_catalog_confirm(call: CallbackQuery):
+    parts = call.data.split("_")
+    try:
+        order_id = int(parts[2]); buyer_id = int(parts[3])
+    except Exception:
+        await call.answer(); return
+    seller = call.from_user.id
+    await db_run(
+        "UPDATE catalog_orders SET status='confirmed', "
+        "confirmed_at=to_char(now(),'YYYY-MM-DD HH24:MI:SS') WHERE id=? AND seller_id=?",
+        (order_id, seller))
+    try:
+        await call.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await call.message.answer(
+        f"✅ *Buyurtma #{order_id} qabul qilindi!*\n\n"
+        f"Xaridorga xabar yuborildi. Yetkazib bergach, 48 soatdan keyin\n"
+        f"baholash so'rovi avtomatik ketadi.")
+    shop = await db_get("SELECT shop_name FROM shops WHERE owner_id=?", (seller,))
+    u = await get_user(seller)
+    sname = (shop["shop_name"] if shop else None) or (u.get("clinic_name") if u else None) or "Sotuvchi"
+    try:
+        await buyer_bot.send_message(
+            buyer_id,
+            f"✅ *Buyurtmangiz qabul qilindi!*\n\n"
+            f"🏪 *{sname}* buyurtmangizni tasdiqladi va jo'natmoqda.\n\n"
+            f"_Yetib kelgach so'raymiz._")
+    except Exception as e:
+        log.error(f"co_confirm buyer notify xato: {e}")
+    await call.answer("✅ Tasdiqlandi!")
+
+
+@router.callback_query(F.data.startswith("co_reject_"))
+async def hk_catalog_reject(call: CallbackQuery):
+    parts = call.data.split("_")
+    try:
+        order_id = int(parts[2]); buyer_id = int(parts[3])
+    except Exception:
+        await call.answer(); return
+    await db_run("UPDATE catalog_orders SET status='rejected' WHERE id=?", (order_id,))
+    try:
+        await call.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await call.message.answer(f"❌ Buyurtma #{order_id} rad etildi.")
+    try:
+        await buyer_bot.send_message(
+            buyer_id,
+            "❌ *Kechirasiz!*\n\nSotuvchida bu mahsulot hozir mavjud emas.\n"
+            "Boshqa sotuvchilardan qidirishingiz mumkin 👉 @XazdentBot")
+    except Exception:
+        pass
+    await call.answer("❌ Rad etildi")
+
+
 @router.callback_query(F.data.startswith("ord_accept_"))
 async def order_accept(call: CallbackQuery):
     """Sotuvchi buyurtmani qabul qiladi."""
