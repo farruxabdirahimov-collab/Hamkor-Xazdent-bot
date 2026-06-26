@@ -1744,6 +1744,10 @@ document.querySelectorAll('.cat-chk').forEach(function(lbl) {
   if (ROLE === 'seller') {
     document.getElementById('nb-my').style.display = 'flex';
     document.getElementById('fab').classList.add('show');
+    // Xaridorga oid bo'limlarni Hamkor ish muhitidan olib tashlaymiz
+    ['nb-sales','nb-news','nb-cart-btn','cart-ic','promo-ic'].forEach(function(id){
+      var e=document.getElementById(id); if(e) e.style.display='none';
+    });
   } else {
     document.getElementById('cart-ic').style.display = 'flex';
     // Tepa dumaloq tugma: aksiya MAVJUD bo'lsa 🎁 Aksiya, aks holda 🛒 Savat
@@ -1763,11 +1767,14 @@ document.querySelectorAll('.cat-chk').forEach(function(lbl) {
   }
   var action = _qp.get('action');
   if (action === 'add' && ROLE === 'seller') {
-    loadCatalog();
+    showView('my', document.getElementById('nb-my'));
     setTimeout(function(){
       var fp = document.getElementById('fpanel');
       if (fp) fp.classList.add('on');
     }, 800);
+  } else if (ROLE === 'seller') {
+    // Hamkor ish muhiti — sotuvchi darhol o'z mahsulotlariga tushadi
+    showView('my', document.getElementById('nb-my'));
   } else {
     loadCatalog();
   }
@@ -1839,6 +1846,8 @@ function showView(v, btn) {
   } else if (v === 'news') {
     document.getElementById('top-title').textContent = '🆕 Yangiliklar';
     loadNews();
+  } else if (v === 'sorders' || (v === 'orders' && ROLE === 'seller')) {
+    loadSellerOrders();   // sotuvchi: kelgan buyurtmalar (top-title o'zi qo'yiladi)
   } else {
     document.getElementById('top-title').textContent = '📋 Buyurtmalar';
     loadOrders();
@@ -2623,14 +2632,15 @@ function loadProfile(){
           pfRow('📍 Manzillarim', "openAddresses()")+
           (isSellerRole ? '' : (sep+'<div style="padding:11px 2px"><div style="font-size:13px">👤 Akkaunt turi</div>'+acctRow+'</div>'))+
         '</div>'+
-        '<div style="font-size:14px;font-weight:700;margin:14px 2px 8px">🛒 Buyurtmalar</div>'+
-        '<div style="'+cardS+'">'+
-          pfRow('❤️ Sevimlilar', "loadFavorites()")+
-          sep+
-          pfRow('📋 Buyurtmalarim', "showView('orders',document.getElementById('nb-orders'))")+
-          sep+
-          pfRow('⭐ Buyurtmalarni baholash', "showView('orders',document.getElementById('nb-orders'))")+
-        '</div>'+
+        (isSellerRole ? '' :
+          '<div style="font-size:14px;font-weight:700;margin:14px 2px 8px">🛒 Buyurtmalar</div>'+
+          '<div style="'+cardS+'">'+
+            pfRow('❤️ Sevimlilar', "loadFavorites()")+
+            sep+
+            pfRow('📋 Buyurtmalarim', "showView('orders',document.getElementById('nb-orders'))")+
+            sep+
+            pfRow('⭐ Buyurtmalarni baholash', "showView('orders',document.getElementById('nb-orders'))")+
+          '</div>')+
         '<div style="font-size:14px;font-weight:700;margin:14px 2px 8px">⚙️ Sozlamalar</div>'+
         '<div style="'+cardS+'">'+
           '<div style="font-size:13px;font-weight:600">🌗 Mavzu</div>'+ themeRow +
@@ -3096,6 +3106,11 @@ function applyRole(role){
   if(my) my.style.display = isSeller?'flex':'none';
   if(st) st.style.display = isSeller?'flex':'none';
   var cart=document.getElementById('cart-ic'); if(cart) cart.style.display = isSeller?'none':'flex';
+  // Xaridorga oid bo'limlar — sotuvchida yashiriladi, xaridorda ko'rsatiladi
+  ['nb-sales','nb-news','nb-cart-btn'].forEach(function(id){
+    var e=document.getElementById(id); if(e) e.style.display = isSeller?'none':'flex';
+  });
+  if(isSeller){ var pic=document.getElementById('promo-ic'); if(pic) pic.style.display='none'; }
   var fab=document.getElementById('fab'); if(fab) fab.classList.toggle('show', isSeller && curView==='my');
   if(isSeller){ try{ maybeShowSellerOnboarding(); }catch(e){} }
 }
