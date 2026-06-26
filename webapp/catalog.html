@@ -1748,6 +1748,7 @@ document.querySelectorAll('.cat-chk').forEach(function(lbl) {
     ['nb-sales','nb-news','nb-cart-btn','cart-ic','promo-ic'].forEach(function(id){
       var e=document.getElementById(id); if(e) e.style.display='none';
     });
+    loadSellerCtx();   // hodim/ega rolini aniqlab, FAB va tugmalarni moslaydi
   } else {
     document.getElementById('cart-ic').style.display = 'flex';
     // Tepa dumaloq tugma: aksiya MAVJUD bo'lsa 🎁 Aksiya, aks holda 🛒 Savat
@@ -1827,7 +1828,7 @@ function showView(v, btn) {
   var isCat = v === 'catalog';
   document.getElementById('srch-row').style.display = isCat ? 'block' : 'none';
   document.getElementById('cats').style.display = isCat ? 'flex' : 'none';
-  document.getElementById('fab').classList.toggle('show', v === 'my' && ROLE === 'seller');
+  document.getElementById('fab').classList.toggle('show', v === 'my' && ROLE === 'seller' && !_isOp());
   if (v === 'catalog') {
     document.getElementById('top-title').textContent = '🛍 XazDent Market';
     loadCatalog();
@@ -2577,9 +2578,12 @@ function loadProfile(){
   Promise.all([
     fetch('/api/user_profile?uid='+UID).then(function(r){return r.json();}).catch(function(){return {};}),
     fetch('/api/web/identities?uid='+UID).then(function(r){return r.json();}).catch(function(){return {};}),
-    fetch('/api/web/auth_methods').then(function(r){return r.json();}).catch(function(){return {};})
+    fetch('/api/web/auth_methods').then(function(r){return r.json();}).catch(function(){return {};}),
+    fetch('/api/catalog/seller_context?uid='+UID,{headers:_tgHeaders()}).then(function(r){return r.json();}).catch(function(){return {};})
   ]).then(function(res){
-    var p=res[0]||{}, idsd=res[1]||{}, amd=res[2]||{};
+    var p=res[0]||{}, idsd=res[1]||{}, amd=res[2]||{}, sctx=res[3]||{};
+    var sRole=(sctx&&sctx.role)||'owner';   // owner | manager | operator | none
+    var isOwner=(sRole==='owner'), isStaff=(sRole==='manager'||sRole==='operator');
     var linked={}; ((idsd.identities)||[]).forEach(function(x){linked[x.provider]=x;});
     // Faqat admin paneldа YOQILGAN usullar ko'rsatiladi (telegram doim)
     var enabled={telegram:true};
@@ -2654,17 +2658,14 @@ function loadProfile(){
           (isBrowser ? '<div style="height:1px;background:var(--border);margin:10px -14px"></div><button onclick="enableWebPush()" style="width:100%;padding:10px;border:1px solid var(--primary);background:none;color:var(--primary);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🔔 Brauzer push\'ni yoqish</button>' : '')+
         '</div>'+
         (isSellerRole ?
+          (isStaff ? '<div style="background:linear-gradient(135deg,#6d28d9,#4f46e5);color:#fff;border-radius:12px;padding:10px 14px;margin:14px 2px 8px;font-size:13px;font-weight:700">'+(sRole==='manager'?'👔 Menejer':'🎧 Operator')+(sctx.shop_name?' · '+esc(sctx.shop_name):'')+'</div>' : '')+
           '<div style="font-size:14px;font-weight:700;margin:14px 2px 8px">🏪 Sotuvchi</div>'+
           '<div style="'+cardS+'">'+
             pfRow('🛒 Kelgan buyurtmalar', "loadSellerOrders()")+
-            sep+
-            pfRow('🏢 Biznes ma\'lumotlari', "openBusiness()")+
-            sep+
-            pfRow('📢 Reklama berish', "openAds()")+
-            sep+
-            pfRow('👥 Hodimlar', "openStaff()")+
-            sep+
-            pfRow('🔗 Integratsiyalar (Telegram / Instagram)', "openIntegrations()")+
+            (isOwner ? sep+pfRow('🏢 Biznes ma\'lumotlari', "openBusiness()") : '')+
+            (isOwner ? sep+pfRow('📢 Reklama berish', "openAds()") : '')+
+            (isOwner ? sep+pfRow('👥 Hodimlar', "openStaff()") : '')+
+            ((isOwner||sRole==='manager') ? sep+pfRow('🔗 Integratsiyalar (Telegram / Instagram)', "openIntegrations()") : '')+
           '</div>'
           : '')+
         '<div style="'+cardS+';margin-top:14px">'+
@@ -3097,6 +3098,22 @@ function connectInstagram(){
   if(tg&&tg.showAlert){try{tg.showAlert(m);}catch(e){}}else alert(m);
 }
 
+// ── 👤 Sotuvchi konteksti (ega / menejer / operator) ─────────────────────────
+function loadSellerCtx(cb){
+  if(!UID){ window._SCTX={role:'owner'}; if(cb)cb(window._SCTX); return; }
+  fetch('/api/catalog/seller_context?uid='+UID,{headers:_tgHeaders()}).then(function(r){return r.json();})
+    .then(function(d){ window._SCTX=(d&&d.role)?d:{role:'owner'}; applySellerCtx(); if(cb)cb(window._SCTX); })
+    .catch(function(){ window._SCTX={role:'owner'}; if(cb)cb(window._SCTX); });
+}
+function _sRole(){ return (window._SCTX&&window._SCTX.role)||'owner'; }
+function _isOp(){ return _sRole()==='operator'; }
+function _canProducts(){ var r=_sRole(); return r==='owner'||r==='manager'; }
+function applySellerCtx(){
+  var fab=document.getElementById('fab');
+  if(fab && _isOp()) fab.classList.remove('show');   // operator mahsulot qo'sha olmaydi
+  if(curView==='my' && ROLE==='seller') loadMy();      // tugmalarni rolga moslab qayta chizamiz
+}
+
 // ── 🔄 Rol / Rejim almashtirish (ilova ichida) ───────────────────────────────
 function applyRole(role){
   // Rollar: clinic (Klinika), zubtex (Zubtexnik) — ikkalasi ham xaridor; seller — sotuvchi
@@ -3111,8 +3128,8 @@ function applyRole(role){
     var e=document.getElementById(id); if(e) e.style.display = isSeller?'none':'flex';
   });
   if(isSeller){ var pic=document.getElementById('promo-ic'); if(pic) pic.style.display='none'; }
-  var fab=document.getElementById('fab'); if(fab) fab.classList.toggle('show', isSeller && curView==='my');
-  if(isSeller){ try{ maybeShowSellerOnboarding(); }catch(e){} }
+  var fab=document.getElementById('fab'); if(fab) fab.classList.toggle('show', isSeller && curView==='my' && !_isOp());
+  if(isSeller){ try{ maybeShowSellerOnboarding(); }catch(e){} loadSellerCtx(); }
 }
 // Sotuvchi onboarding — ilovaga sotuvchi sifatida kirganda BIR MARTA ko'rsatiladi
 function maybeShowSellerOnboarding(){
@@ -3538,8 +3555,8 @@ function loadMy() {
       var qaBtn=function(ic,txt,fn,bg){ return '<button onclick="'+fn+'" style="flex:1;min-width:0;padding:11px 6px;border:'+(bg?'none':'1px solid var(--border)')+';border-radius:12px;background:'+(bg||'var(--surface,#fff)')+';color:'+(bg?'#fff':'var(--text)')+';font-weight:700;font-size:12px;cursor:pointer">'+ic+'<br>'+txt+'</button>'; };
       var aiBtn = '<div style="display:flex;gap:8px;margin:12px">'+
         qaBtn('🛒','Buyurtmalar','loadSellerOrders()')+
-        qaBtn('📢','Reklama','openAds()')+
-        qaBtn('🤖','AI import','showAiImport()','linear-gradient(135deg,#6d28d9,#4f46e5)')+
+        (_sRole()==='owner' ? qaBtn('📢','Reklama','openAds()') : '')+
+        (_canProducts() ? qaBtn('🤖','AI import','showAiImport()','linear-gradient(135deg,#6d28d9,#4f46e5)') : '')+
       '</div>';
       if (!prods.length) {
         document.getElementById('main').innerHTML = welcome + aiBtn +
@@ -3557,9 +3574,9 @@ function loadMy() {
             (p.article_code?'<div class="mpcode">📌 '+esc(p.article_code)+'</div>':'')+
           '</div>'+
           '<div class="mpbtns">'+
-            '<button class="mpbtn edit" onclick="openEdit('+p.id+')">✏️</button>'+
+            (_canProducts()?'<button class="mpbtn edit" onclick="openEdit('+p.id+')">✏️</button>':'')+
             '<button class="mpbtn share" onclick="shareProdMy('+p.id+',\''+esc(p.article_code||'')+'\')">📤</button>'+
-            (p.is_active===2?'<button class="mpbtn" onclick="archiveProd('+p.id+',\'restore\')">✅</button>':'<button class="mpbtn" onclick="archiveProd('+p.id+',\'archive\')">🗂</button>')+
+            (_canProducts()?(p.is_active===2?'<button class="mpbtn" onclick="archiveProd('+p.id+',\'restore\')">✅</button>':'<button class="mpbtn" onclick="archiveProd('+p.id+',\'archive\')">🗂</button>'):'')+
           '</div>'+
         '</div>';
       });
