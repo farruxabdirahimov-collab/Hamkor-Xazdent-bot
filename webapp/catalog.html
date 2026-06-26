@@ -2613,12 +2613,15 @@ function loadProfile(){
     var themeRow='<div style="display:flex;gap:6px;margin-top:8px">'+_chip(th==='system','📱 Tizim',"setTheme('system')")+_chip(th==='light','☀️ Yorug\'',"setTheme('light')")+_chip(th==='dark','🌙 Tun',"setTheme('dark')")+'</div>';
     var lg=(p.lang||'uz');
     var langRow='<div style="display:flex;gap:6px;margin-top:8px">'+_chip(lg==='uz','🇺🇿 O\'zbek',"setLang('uz')")+_chip(lg==='ru','🇷🇺 Русский',"setLang('ru')")+'</div>';
-    var isSellerRole=(p.role==='seller');
+    // Hamkor ilovasida (hostname=hamkor/seller) HAR DOIM sotuvchi rejimi — rol almashtirish yo'q
+    var isHamkor = /^(hamkor|seller)\./i.test(location.hostname);
+    var isSellerRole = isHamkor || (ROLE==='seller') || (p.role==='seller');
     var acctType=(p.role==='zubtex')?'zubtex':'clinic';
     var acctRow='<div style="display:flex;gap:6px;margin-top:8px">'+_chip(acctType==='clinic','🏥 Klinika',"switchRole('clinic')")+_chip(acctType==='zubtex','🔬 Zubtexnik',"switchRole('zubtex')")+'</div>';
-    var sellerEntry = isSellerRole
+    // Rol almashtirish faqat ASOSIY ilovada (Hamkor ilovasida — yo'q)
+    var sellerEntry = isHamkor ? '' : (isSellerRole
       ? pfRow('🛒 Xaridor rejimiga qaytish', "switchRole('clinic')")
-      : pfRow('🏪 Xazdentda soting', "switchRole('seller')");
+      : pfRow('🏪 Xazdentda soting', "switchRole('seller')"));
     var np=getNotifPrefs();
     function _tog(on,label,fn){ return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 2px"><span style="font-size:13px">'+label+'</span><button onclick="'+fn+'" style="width:44px;height:24px;border-radius:12px;border:none;cursor:pointer;background:'+(on?'var(--green)':'var(--border)')+';position:relative;flex-shrink:0"><span style="position:absolute;top:2px;'+(on?'right:2px':'left:2px')+';width:20px;height:20px;border-radius:50%;background:#fff"></span></button></div>'; }
     el.innerHTML=
@@ -2652,9 +2655,12 @@ function loadProfile(){
           '<div style="font-size:13px;font-weight:600">🌐 Til</div>'+ langRow +
           '<div style="height:1px;background:var(--border);margin:13px -14px"></div>'+
           '<div style="font-size:13px;font-weight:600;margin-bottom:2px">🔔 Bildirishnomalar</div>'+
-          _tog(np.order,'🛒 Buyurtma holati',"toggleNotif('order')")+
-          _tog(np.promo,'🎁 Aksiya va chegirmalar',"toggleNotif('promo')")+
-          _tog(np.chat,'💬 Yangi xabarlar',"toggleNotif('chat')")+
+          (isSellerRole
+            ? _tog(np.order,'🛒 Yangi buyurtmalar',"toggleNotif('order')")+
+              _tog(np.chat,'💬 Xabarlar',"toggleNotif('chat')")
+            : _tog(np.order,'🛒 Buyurtma holati',"toggleNotif('order')")+
+              _tog(np.promo,'🎁 Aksiya va chegirmalar',"toggleNotif('promo')")+
+              _tog(np.chat,'💬 Yangi xabarlar',"toggleNotif('chat')"))+
           (isBrowser ? '<div style="height:1px;background:var(--border);margin:10px -14px"></div><button onclick="enableWebPush()" style="width:100%;padding:10px;border:1px solid var(--primary);background:none;color:var(--primary);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🔔 Brauzer push\'ni yoqish</button>' : '')+
         '</div>'+
         (isSellerRole ?
@@ -2669,10 +2675,7 @@ function loadProfile(){
           '</div>'
           : '')+
         '<div style="'+cardS+';margin-top:14px">'+
-          sellerEntry +
-          sep+
-          pfRow('🤝 Hamkor sotuvchi bot (ixtiyoriy)', "openSellerBot()")+
-          sep+
+          (isHamkor ? '' : (sellerEntry + sep + pfRow('🤝 Hamkor sotuvchi bot (ixtiyoriy)', "openSellerBot()") + sep))+
           pfRow('🆘 Yordam / Qo\'llab-quvvatlash', "openSupport()")+
           sep+
           pfRow('📜 Maxfiylik va Shartlar', "openPrivacy()")+
