@@ -3431,7 +3431,7 @@ function loadMyStats() {
           '<span style="font-size:12px;color:var(--hint)">'+
           'Xaridorlar mahsulotlaringizni ko\'rgandan keyin ko\'rinadi</span></div>';
       }
-      document.getElementById('main').innerHTML = html;
+      document.getElementById('main').innerHTML = '<div style="max-width:600px;margin:0 auto;padding:14px">'+html+'</div>';
     }).catch(function(){
       document.getElementById('main').innerHTML =
         '<div class="empty">Xato yuz berdi</div>';
@@ -3562,11 +3562,11 @@ function loadMy() {
         (_canProducts() ? qaBtn('🤖','AI import','showAiImport()','linear-gradient(135deg,#6d28d9,#4f46e5)') : '')+
       '</div>';
       if (!prods.length) {
-        document.getElementById('main').innerHTML = welcome + aiBtn +
-          '<div class="empty"><div class="empty-ic">📦</div>Hali mahsulot yo\'q<br><small>➕ tugmani bosib birinchi mahsulotingizni qo\'shing</small></div>';
+        document.getElementById('main').innerHTML = '<div style="max-width:600px;margin:0 auto">'+ welcome + aiBtn +
+          '<div class="empty"><div class="empty-ic">📦</div>Hali mahsulot yo\'q<br><small>➕ tugmani bosib birinchi mahsulotingizni qo\'shing</small></div></div>';
         return;
       }
-      var html = aiBtn + '<div style="background:#fff;border-radius:20px;overflow:hidden;margin:12px;border:1px solid rgba(68,77,207,0.08);box-shadow:0 4px 16px rgba(68,77,207,0.08)">';
+      var html = '<div style="max-width:600px;margin:0 auto">'+ aiBtn + '<div style="background:#fff;border-radius:20px;overflow:hidden;margin:12px;border:1px solid rgba(68,77,207,0.08);box-shadow:0 4px 16px rgba(68,77,207,0.08)">';
       prods.forEach(function(p){
         var img = p.photos&&p.photos[0]?'<img src="'+p.photos[0]+'" onerror="this.parentNode.innerHTML=\'📦\'">':'📦';
         html += '<div class="myprod">'+
@@ -3583,7 +3583,7 @@ function loadMy() {
           '</div>'+
         '</div>';
       });
-      html += '</div>';
+      html += '</div></div>';
       try {
         document.getElementById('main').innerHTML = html;
       } catch(renderErr) {
