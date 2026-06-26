@@ -128,28 +128,26 @@ async def claim_order(call: CallbackQuery):
     uname = (u["clinic_name"] or u["full_name"] or str(buyer_id)) if u else str(buyer_id)
 
     try:
+        # MAXFIYLIK: do'kon nomi xaridorga KO'RSATILMAYDI
         await buyer_bot.send_message(
             buyer_id,
             f"✅ *Buyurtmangiz qabul qilindi!*\n\n"
-            f"🏪 *{shop_name}* jamoasi\n"
-            f"tez orada siz bilan bog\'lanadi.\n\n"
+            f"Sotuvchi tez orada jo'natadi.\n\n"
             f"📦 {prod_txt}"
         )
     except Exception as e:
         log.error(f"Claim buyer notify xato: {e}")
 
-    # Guruh a'zosiga xaridor kontakti
+    # Guruh a'zosiga — MAXFIYLIK: xaridor ismi/telefoni BERILMAYDI, faqat yetkazish hududi/manzili
     try:
         await bot.send_message(
             claimer,
             f"📋 *Buyurtma #{order_id} — Sizning zimmaingizda*\n\n"
-            f"👤 Xaridor: *{uname}*\n"
-            f"📞 {u['phone'] if u else '—'}\n"
             f"📍 {u['region'] if u else '—'}\n"
             f"🏠 {u['address'] if u else '—'}\n\n"
             f"📦 {prod_txt}\n\n"
             f"💰 Jami: *{order['total_amount']:,.0f} so\'m*\n\n"
-            f"_Kompaniya nomidan muloqot qiling!_"
+            f"🔒 _Mijoz ma'lumotlari maxfiy — yetkazishni XazDent muvofiqlashtiradi_"
         )
     except Exception as e:
         log.error(f"Claim claimer notify xato: {e}")
@@ -285,28 +283,27 @@ async def claim_order(call: CallbackQuery):
         uregion = buyer["region"] or "—"
         uaddr   = buyer["address"] or "—"
 
+        # MAXFIYLIK: xaridor ismi/telefoni BERILMAYDI — faqat yetkazish hududi/manzili
         contact_txt = (
             f"✅ *Buyurtma #{order_id} sizga biriktirildi!*\n\n"
             f"📦 *Buyurtma:*\n{lines_txt}\n"
             f"💰 *Jami: {order['total_amount']:,.0f} so'm*\n\n"
             f"━━━━━━━━━━━━━━━━━━\n"
-            f"👤 *Xaridor:* {uname}\n"
-            f"📞 *Telefon:* {uphone}\n"
             f"📍 *Hudud:* {uregion}\n"
             f"🏠 *Manzil:* {uaddr}\n\n"
-            f"_Iltimos, {sname} kompaniyasi nomidan bog\'laning_"
+            f"🔒 _Mijoz ma'lumotlari maxfiy — yetkazishni XazDent muvofiqlashtiradi_"
         )
         try:
             await bot.send_message(claimer, contact_txt)
         except Exception as e:
             log.error(f"Claim contact xato: {e}")
 
-    # Xaridorga ham xabar — kompaniya nomi bilan
+    # Xaridorga ham xabar — MAXFIYLIK: do'kon nomi KO'RSATILMAYDI
     try:
         await bot.send_message(
             order["buyer_id"],
             f"✅ *Buyurtmangiz #{order_id} qabul qilindi!*\n\n"
-            f"🏪 *{sname}* xodimi tez orada siz bilan bog\'lanadi."
+            f"Sotuvchi xodimi tez orada siz bilan bog\'lanadi."
         )
     except Exception:
         pass

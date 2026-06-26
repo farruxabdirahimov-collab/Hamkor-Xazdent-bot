@@ -253,15 +253,15 @@ async def checkout_pay_cod(call: CallbackQuery, state: FSMContext):
     ])
     d_txt = "🚗 Sotuvchi o'zi" if data.get("delivery_method") == "seller_self" else "📦 BTS Express"
     try:
+        # MAXFIYLIK: xaridor ismi/telefoni sotuvchiga BERILMAYDI — faqat yetkazish manzili
         await bot.send_message(
             seller_id,
             f"🆕 *Yangi buyurtma {ord_num}!*\n\n"
-            f"👤 Xaridor: *{uname}*\n"
-            f"📞 {data.get('delivery_phone','')}\n"
             f"💳 To'lov: 🚚 Yetkazilganda (COD)\n"
             f"🚚 Yetkazish: {d_txt}\n"
             f"📍 {data.get('delivery_address','')}\n\n"
             f"💰 Jami: *{total:,.0f} so'm*\n\n"
+            f"🔒 _Mijoz ma'lumotlari maxfiy — yetkazishni XazDent muvofiqlashtiradi_\n"
             f"⏰ 2 soat ichida javob bering",
             reply_markup=seller_kb
         )
@@ -289,14 +289,12 @@ async def hk_catalog_confirm(call: CallbackQuery):
         f"✅ *Buyurtma #{order_id} qabul qilindi!*\n\n"
         f"Xaridorga xabar yuborildi. Yetkazib bergach, 48 soatdan keyin\n"
         f"baholash so'rovi avtomatik ketadi.")
-    shop = await db_get("SELECT shop_name FROM shops WHERE owner_id=?", (seller,))
-    u = await get_user(seller)
-    sname = (shop["shop_name"] if shop else None) or (u.get("clinic_name") if u else None) or "Sotuvchi"
+    # MAXFIYLIK: do'kon nomi xaridorga KO'RSATILMAYDI
     try:
         await buyer_bot.send_message(
             buyer_id,
             f"✅ *Buyurtmangiz qabul qilindi!*\n\n"
-            f"🏪 *{sname}* buyurtmangizni tasdiqladi va jo'natmoqda.\n\n"
+            f"Sotuvchi buyurtmangizni tasdiqladi va jo'natmoqda.\n\n"
             f"_Yetib kelgach so'raymiz._")
     except Exception as e:
         log.error(f"co_confirm buyer notify xato: {e}")

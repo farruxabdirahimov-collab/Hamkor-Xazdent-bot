@@ -125,14 +125,14 @@ async def _create_web_cart_order(msg, u, items_raw):
             "INSERT INTO catalog_orders(buyer_id,seller_id,products_json,total_amount) VALUES(?,?,?,?)",
             (uid, seller_id, _pj2.dumps(items, ensure_ascii=False), total)
         )
+        # MAXFIYLIK: xaridor ismi/telefoni sotuvchiga BERILMAYDI — faqat yetkazish hududi
         msg_txt = (
             f"🌐 *Veb-saytdan buyurtma #{order_id}!*\n\n"
-            f"📦 *{data['shop_name']}:*\n{lines_txt}\n\n"
+            f"{lines_txt}\n\n"
             f"💰 *Jami: {fmt_price(total)} som*\n\n"
             f"━━━━━━━━━━━━━━━━━━\n"
-            f"🏥 *{uname}*\n"
-            f"📞 {uphone}\n"
-            f"📍 {uregion}"
+            f"📍 Yetkazish hududi: {uregion}\n"
+            f"🔒 _Mijoz ma'lumotlari maxfiy — yetkazishni XazDent muvofiqlashtiradi_"
         )
         confirm_kb = InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="✅ Qabul qildim", callback_data=f"co_confirm_{order_id}_{uid}"),
@@ -173,7 +173,6 @@ async def post_to_channel(need_id, need):
         f"🦷 {need['product_name']}\n"
         f"📦 {need['quantity']} {need['unit']}\n"
         f"⏱ {dl_txt} ichida\n\n"
-        f"📍 {owner['region'] or ''}\n\n"
         f"{tags}\n💬 @XazdentBot"
     )
     batch_id = need.get("batch_id")
@@ -210,7 +209,6 @@ async def post_batch_to_channel(batch_id, needs_list, owner, photo_file_id=None)
     txt = (
         f"📋 *BUYURTMA #{batch_id}* — {len(needs_list)} ta mahsulot\n\n"
         f"{lines}\n\n"
-        f"📍 {owner.get('region') or ''}\n"
         f"⏱ {dl_txt} ichida{pm_line}\n\n"
         f"{tags}\n💬 @XazdentBot"
     )
@@ -422,15 +420,15 @@ async def _show_batch_table(target_msg, batch_id: int):
         st = {"active":"🟢","paused":"⏸","done":"✅","cancelled":"❌"}.get(n["status"],"📋")
         txt += f"{st} *{n['product_name']}* — {n['quantity']} {n['unit']}\n"
         if offs:
+            # MAXFIYLIK: sotuvchilar nomi xaridorga ko'rsatilmaydi — anonim "Sotuvchi N"
             for i, o in enumerate(offs, 1):
-                sname  = o["clinic_name"] or o["full_name"] or "Sotuvchi"
+                sname  = f"Sotuvchi {i}"
                 marker = "✅ " if i == 1 else "   "
                 note   = f" _{o['note']}_" if o.get("note") and o["note"] != "mavjud_emas" else ""
                 txt   += f"  {marker}{i}. {sname} — {o['price']:,.0f} so'm{note}\n"
             if n["status"] == "active":
                 best = offs[0]
-                rows_for_accept.append((n["id"], best["id"], best["price"],
-                                        best["clinic_name"] or best["full_name"] or "Sotuvchi"))
+                rows_for_accept.append((n["id"], best["id"], best["price"], "Sotuvchi 1"))
         else:
             txt += "  _taklif kelmagan_\n"
         txt += "\n"
@@ -469,7 +467,7 @@ async def build_table(batch_id: int) -> str:
             lines.append("   _Taklif kelmagan_")
         else:
             for i, o in enumerate(offs, 1):
-                name   = o["clinic_name"] or o["full_name"] or "Sotuvchi"
+                name   = f"Sotuvchi {i}"   # MAXFIYLIK: anonim
                 marker = "✅ " if i == 1 else ""
                 lines.append(f"   {marker}{i}. {name} — {o['price']:,.0f} so'm")
         lines.append("")
@@ -483,21 +481,22 @@ async def build_excel(batch_id: int):
     except ImportError:
         return None
 
+    # MAXFIYLIK: sotuvchilar anonim — seller_id → "Sotuvchi N"
     needs = await db_all("SELECT * FROM needs WHERE batch_id=?", (batch_id,))
-    sellers_set = set()
+    sid_order = []
     need_offers = {}
     for n in needs:
         offs = await db_all(
-            "SELECT o.*, u.clinic_name, u.full_name FROM offers o "
-            "JOIN users u ON o.seller_id=u.id "
-            "WHERE o.need_id=? ORDER BY o.price ASC",
+            "SELECT o.* FROM offers o WHERE o.need_id=? ORDER BY o.price ASC",
             (n["id"],),
         )
         need_offers[n["id"]] = list(offs)
         for o in offs:
-            sellers_set.add(o["clinic_name"] or o["full_name"] or f"Sotuvchi{o['seller_id']}")
+            if o["seller_id"] not in sid_order:
+                sid_order.append(o["seller_id"])
 
-    sellers = sorted(sellers_set)
+    sid_label = {sid: f"Sotuvchi {i+1}" for i, sid in enumerate(sid_order)}
+    sellers = [sid_label[s] for s in sid_order]
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = f"Jadval #{batch_id}"
@@ -519,8 +518,8 @@ async def build_excel(batch_id: int):
         qty       = float(n["quantity"])
         min_total = None
         for o in offs:
-            seller_name = o["clinic_name"] or o["full_name"] or f"Sotuvchi{o['seller_id']}"
-            if seller_name in sellers:
+            seller_name = sid_label.get(o["seller_id"])
+            if seller_name and seller_name in sellers:
                 col_i   = sellers.index(seller_name) + 4
                 unit_p  = o["price"]          # 1 ta uchun
                 total_p = unit_p * qty        # jami
@@ -601,7 +600,7 @@ async def _save_offer(obj, state: FSMContext, note):
             f"📩 *Yangi taklif!*\n\n"
             f"🦷 {d['need_name']}\n"
             f"💰 *{d['price']:,.0f} so'm*/{d['need_unit']}\n"
-            f"🏪 {sname}{note_t}",
+            f"🏪 XazDent sotuvchisi{note_t}",
             reply_markup=ik([ib(f"📩 Barcha takliflarni ko'rish", f"view_offers_{d['need_id']}")]),
         )
     except Exception as e:
@@ -712,7 +711,8 @@ async def _build_seller_excel(uid: int) -> str:
 
     # ── 1. Umumiy savdo ──────────────────────────────────────────
     ws1 = wb.active; ws1.title = "Jami savdo"
-    hdr(ws1, ["Sana", "Mahsulot", "Miqdor", "Birlik", "Narx (1 ta)", "Jami", "Klinika"])
+    # MAXFIYLIK: xaridor (klinika) nomi sotuvchi hisobotida KO'RSATILMAYDI
+    hdr(ws1, ["Sana", "Mahsulot", "Miqdor", "Birlik", "Narx (1 ta)", "Jami"])
     offs = await db_all(
         "SELECT o.*, n.product_name, n.quantity, n.unit, "
         "COALESCE(u.clinic_name, u.full_name) as clinic "
@@ -730,7 +730,6 @@ async def _build_seller_excel(uid: int) -> str:
         ws1.cell(row=i, column=4, value=o["unit"])
         ws1.cell(row=i, column=5, value=o["price"])
         ws1.cell(row=i, column=6, value=o["price"] * o["quantity"])
-        ws1.cell(row=i, column=7, value=o["clinic"] or "—")
     # Jami
     if offs:
         row = len(offs) + 2
@@ -839,15 +838,15 @@ async def _notify_winner(seller_id: int, clinic: dict, items: list):
     spm_txt = " · ".join(pay_icons[p] for p in spm_raw.split(",") if p in pay_icons)
     spm_line = f"\n💳 To\'lov: {spm_txt}" if spm_txt else ""
 
+    # MAXFIYLIK: xaridor ismi/telefoni sotuvchiga BERILMAYDI — faqat yetkazish hududi/manzili
     txt = (
         f"🎉 *Taklifingiz qabul qilindi!*\n\n"
         f"📦 *Buyurtma:*\n{items_txt}\n\n"
         f"💰 *Jami: {total:,.0f} so\'m*{spm_line}\n\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"🏥 *{cname}*\n"
-        f"📞 {cphone}\n"
         f"📍 {cregion}\n"
-        f"🏠 {caddr}"
+        f"🏠 {caddr}\n"
+        f"🔒 _Mijoz ma'lumotlari maxfiy — yetkazishni XazDent muvofiqlashtiradi_"
     )
 
     try:
@@ -1025,11 +1024,11 @@ async def _show_product_start(msg: Message, pid: int):
         rating = float(avg["a"])
         stars = "⭐" * round(rating) + f" ({rating:.1f})"
 
+    # MAXFIYLIK: do'kon nomi/hududi xaridorga KO'RSATILMAYDI
     txt = (
         f"🦷 *{prod['name']}*\n\n"
         f"💰 *{prod['price']:,.0f} so\'m / {prod['unit']}*\n"
-        f"🏪 {prod['shop_name']}\n"
-        f"📍 {prod['region'] or '—'}\n"
+        f"✅ XazDent tasdiqlagan sotuvchi\n"
         + (f"⭐ {stars}\n" if stars else "") +
         (f"\n_{prod['description']}_" if prod.get("description") else "")
     )
@@ -1074,15 +1073,15 @@ async def _send_quick_order(target_msg, state: FSMContext, qty: float, buyer_id:
         (buyer_id, seller_id, _pj.dumps(items, ensure_ascii=False), total)
     )
 
+    # MAXFIYLIK: xaridor ismi/telefoni sotuvchiga BERILMAYDI — faqat yetkazish hududi/manzili
     msg_txt = (
         f"⚡ *Tezkor buyurtma #{order_id}!*\n\n"
         f"📦 *{name}* — {qty} {unit}\n"
         f"💰 {price:,.0f} × {qty} = *{total:,.0f} so\'m*\n\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"🏥 *{uname}*\n"
-        f"📞 {uphone}\n"
         f"📍 {uregion}\n"
-        f"🏠 {uaddr}"
+        f"🏠 {uaddr}\n"
+        f"🔒 _Mijoz ma'lumotlari maxfiy — yetkazishni XazDent muvofiqlashtiradi_"
     )
     confirm_kb = InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="✅ Qabul qildim",
@@ -1225,11 +1224,11 @@ async def _post_order_to_group(order_id: int, shop: dict,
     if not group_id:
         return
     shop_name = shop.get("shop_name", "Do'kon")
+    # MAXFIYLIK: xaridor ismi guruhda KO'RSATILMAYDI — faqat yetkazish hududi
     msg_txt = (
         f"🛒 *Yangi buyurtma #{order_id}!*\n\n"
         f"📦 {products_txt}\n\n"
         f"💰 *Jami: {total:,.0f} so\'m*\n\n"
-        f"🏥 *{buyer_name}*\n"
         f"📍 {buyer_region}\n\n"
         f"_Kim qabul qiladi?_"
     )

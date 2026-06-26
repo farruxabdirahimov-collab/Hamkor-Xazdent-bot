@@ -2201,7 +2201,7 @@ function openDetail(pid) {
     '<div class="dbody">'+
       '<div class="dname">'+esc(p.name)+'</div>'+
       (p.article_code?'<div class="dcode">📌 '+esc(p.article_code)+'</div>':'')+
-      '<div class="dshop">✅ Tasdiqlangan sotuvchi · 📍 '+esc(p.region||'')+'</div>'+
+      '<div class="dshop">✅ XazDent tasdiqlagan sotuvchi</div>'+
       '<div class="dprice">'+fmtPrice(p.price)+'<span style="font-size:14px;font-weight:400;color:var(--hint)">/'+esc(p.unit)+'</span></div>'+
       scarcityHtml(p)+
       (p.description?'<div class="ddesc">'+esc(p.description)+'</div>':'')+
@@ -3005,8 +3005,8 @@ function loadSellerOrders(){
         '<div style="display:flex;justify-content:space-between;align-items:center"><b>#'+o.id+'</b><span style="font-size:12px;color:var(--hint)">'+(SL[o.status]||esc(o.status))+'</span></div>'+
         '<div style="font-size:13px;margin-top:6px">'+items+'</div>'+
         '<div style="font-size:14px;font-weight:700;margin-top:4px">'+fmtPrice(o.total)+'</div>'+
-        '<div style="font-size:12px;color:var(--hint);margin-top:4px">👤 '+esc(o.buyer_name||'')+' · 📞 '+esc(o.delivery_phone||o.buyer_phone||'—')+'</div>'+
-        (o.delivery_address?'<div style="font-size:12px;color:var(--hint)">📍 '+esc(o.delivery_address)+'</div>':'')+
+        (o.delivery_address?'<div style="font-size:12px;color:var(--hint);margin-top:4px">📍 '+esc(o.delivery_address)+'</div>':'')+
+        '<div style="font-size:11px;color:var(--hint);margin-top:2px">🔒 Mijoz ma\'lumotlari maxfiy — yetkazishni XazDent muvofiqlashtiradi</div>'+
         (o.status==='pending'?'<div style="display:flex;gap:6px;margin-top:8px"><button onclick="sellerOrderAct('+o.id+',\'confirm\')" style="flex:1;padding:9px;border:none;border-radius:8px;background:var(--green,#10b981);color:#fff;font-weight:700;cursor:pointer">✅ Qabul qilish</button><button onclick="sellerOrderAct('+o.id+',\'reject\')" style="border:1px solid var(--red);background:none;color:var(--red);border-radius:8px;padding:9px 12px;cursor:pointer">❌ Rad</button></div>':'')+
       '</div>';
     });
