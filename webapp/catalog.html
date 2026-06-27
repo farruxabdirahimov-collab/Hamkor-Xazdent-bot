@@ -3472,6 +3472,7 @@ function showAiImport(){
         '</div>'+
         '<button id="ai-go" onclick="aiStart()" style="width:100%;border:none;border-radius:10px;padding:13px;background:linear-gradient(135deg,#6d28d9,#4f46e5);color:#fff;font-weight:700;cursor:pointer">🔎 Kanalni tahlil qilish</button>'+
         '<div id="ai-msg" style="font-size:12px;color:var(--hint);margin-top:8px"></div>'+
+        '<div id="ai-prog" style="margin-top:8px;display:none;background:var(--surface,#0f1226);border:1px solid var(--border);border-radius:10px;padding:10px;font-size:12px;max-height:220px;overflow-y:auto;font-family:ui-monospace,monospace;line-height:1.7"></div>'+
         '<div id="ai-drafts" style="margin-top:12px"></div>'+
       '</div>';
     loadDrafts();
@@ -3493,11 +3494,30 @@ function aiStart(){
   fetch('/api/catalog/ai_import',{method:'POST',headers:_tgHeaders({'Content-Type':'application/json'}),body:JSON.stringify({uid:UID,channel:ch})})
     .then(function(r){return r.json();}).then(function(d){
       btn.disabled=false; btn.textContent='Tahlil';
-      if(d&&d.ok){ msg.style.color='var(--primary)'; msg.textContent='🔎 AI kanalni tahlil qilyapti... qoralamalar pastda paydo bo\'ladi';
-        var n=0, iv=setInterval(function(){ n++; loadDrafts(); if(n>=10) clearInterval(iv); },4000); }
+      if(d&&d.ok){ msg.style.color='var(--primary)'; msg.textContent='🔎 AI kanalni tahlil qilyapti…'; aiPollProgress(); }
       else if(d&&d.error==='ai_error'){ msg.style.color='#ef4444'; msg.textContent='⚠️ AI xatosi: '+(d.detail||'noma\'lum')+' (admin: Grok kalit/kredit/model)'; }
       else { msg.style.color='#ef4444'; msg.textContent=(d&&d.error==='ai_not_configured')?'AI hozircha sozlanmagan (admin)':(d&&d.error==='channel kerak')?'Kanal manzilini kiriting':'Xato yuz berdi'; }
     }).catch(function(){ btn.disabled=false; btn.textContent='Tahlil'; msg.style.color='#ef4444'; msg.textContent='Tarmoq xatosi'; });
+}
+var _aiProgIv=null;
+function aiPollProgress(){
+  var box=document.getElementById('ai-prog');
+  if(box){ box.style.display='block'; box.innerHTML='<div style="color:var(--hint)">⏳ Boshlanmoqda…</div>'; }
+  if(_aiProgIv) clearInterval(_aiProgIv);
+  var tries=0;
+  _aiProgIv=setInterval(function(){
+    tries++;
+    fetch('/api/catalog/ai_progress?uid='+UID,{headers:_tgHeaders()}).then(function(r){return r.json();}).then(function(d){
+      var b=document.getElementById('ai-prog'); if(!b) { clearInterval(_aiProgIv); return; }
+      var lines=(d&&d.lines)||[];
+      if(lines.length){
+        b.innerHTML=lines.map(function(L){ return '<div>'+esc(L)+'</div>'; }).join('');
+        b.scrollTop=b.scrollHeight;
+      }
+      loadDrafts();
+      if((d&&d.done) || tries>120){ clearInterval(_aiProgIv); loadDrafts(); }
+    }).catch(function(){ if(tries>120) clearInterval(_aiProgIv); });
+  },1500);
 }
 function loadDrafts(){
   fetch('/api/catalog/drafts?uid='+UID,{headers:_tgHeaders()}).then(function(r){return r.json();}).then(function(d){
