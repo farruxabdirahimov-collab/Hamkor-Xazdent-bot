@@ -1368,6 +1368,18 @@ body{
   </div>
 </div>
 
+<!-- 💎 Obuna -->
+<div class="fpanel" id="sub-panel">
+  <div class="fsheet">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="ftitle" style="margin-bottom:0">💎 Obuna</div>
+      <button onclick="document.getElementById('sub-panel').classList.remove('on')" style="width:32px;height:32px;border-radius:50%;border:none;background:var(--border);color:var(--text);font-size:16px;cursor:pointer">✕</button>
+    </div>
+    <div id="sub-status" style="margin-bottom:14px"></div>
+    <div id="sub-plans"></div>
+  </div>
+</div>
+
 <script>
 
 // ── TRACKING ──────────────────────────────────────────────────────────────────
@@ -2672,6 +2684,7 @@ function loadProfile(){
             (isOwner ? sep+pfRow('🏢 Biznes ma\'lumotlari', "openBusiness()") : '')+
             (isOwner ? sep+pfRow('📢 Reklama berish', "openAds()") : '')+
             (isOwner ? sep+pfRow('👥 Hodimlar', "openStaff()") : '')+
+            (isOwner ? sep+pfRow('💎 Obuna', "openSubscription()") : '')+
             ((isOwner||sRole==='manager') ? sep+pfRow('🔗 Integratsiyalar (Telegram / Instagram)', "openIntegrations()") : '')+
           '</div>'
           : '')+
@@ -3059,7 +3072,8 @@ function createAd(){
   if(t==='product' && !pid){ alert('Mahsulotni tanlang'); return; }
   fetch('/api/catalog/ads/create',{method:'POST',headers:_tgHeaders({'Content-Type':'application/json'}),body:JSON.stringify({uid:UID,ad_type:t,target_id:pid?parseInt(pid,10):0,days:days})})
     .then(function(r){return r.json();}).then(function(d){
-      if(d&&d.ok){ var m='✅ Reklama so\'rovi yuborildi. To\'lov tizimi ulangach faollashadi.'; if(tg&&tg.showAlert){try{tg.showAlert(m);}catch(e){}}else alert(m); openAds(); }
+      if(d&&d.ok){ var m='✅ Reklama so\'rovi yuborildi. Admin tasdiqlagach faollashadi.'; if(tg&&tg.showAlert){try{tg.showAlert(m);}catch(e){}}else alert(m); openAds(); }
+      else if(d&&d.error==='subscription_required'){ document.getElementById('ads-panel').classList.remove('on'); subRequired(); }
       else alert('Xato yuz berdi'); }).catch(function(){ alert('Tarmoq xatosi'); });
 }
 
@@ -3100,6 +3114,47 @@ function openIntegrations(){ document.getElementById('integ-panel').classList.ad
 function connectInstagram(){
   var m='📷 Instagram integratsiyasi tez orada ulanadi. Hozircha Telegram kanal orqali import qilishingiz mumkin.';
   if(tg&&tg.showAlert){try{tg.showAlert(m);}catch(e){}}else alert(m);
+}
+
+// ── 💎 Obuna ─────────────────────────────────────────────────────────────────
+function openSubscription(){
+  var st=document.getElementById('sub-status'), pl=document.getElementById('sub-plans');
+  st.innerHTML='<div style="color:var(--hint);font-size:13px">Yuklanmoqda…</div>'; pl.innerHTML='';
+  document.getElementById('sub-panel').classList.add('on');
+  fetch('/api/catalog/subscription?uid='+UID,{headers:_tgHeaders()}).then(function(r){return r.json();}).then(function(s){
+    var SL={active:'✅ Faol',trial:'🎁 Sinov muddati',expired:'⌛️ Muddati tugagan',none:'❌ Obuna yo\'q'};
+    var on=(s.status==='active'||s.status==='trial'),col=on?'var(--green,#10b981)':'#ef4444';
+    st.innerHTML='<div style="border:1px solid var(--border);border-radius:12px;padding:12px">'+
+      '<div style="font-weight:700">Holat: <span style="color:'+col+'">'+(SL[s.status]||esc(s.status||''))+'</span></div>'+
+      (s.until?'<div style="font-size:12px;color:var(--hint);margin-top:4px">'+(s.status==='trial'?'Sinov tugaydi: ':'Amal qiladi: ')+esc(s.until)+' · '+(s.days_left||0)+' kun qoldi</div>':'')+'</div>';
+  }).catch(function(){});
+  fetch('/api/catalog/plans',{headers:_tgHeaders()}).then(function(r){return r.json();}).then(function(d){
+    var plans=(d&&d.plans)||[];
+    if(!plans.length){ pl.innerHTML='<div style="color:var(--hint);font-size:13px;margin-top:10px">Hozircha reja yo\'q</div>'; return; }
+    pl.innerHTML='<div style="font-weight:700;margin:14px 2px 8px">Rejalar va imkoniyatlar</div>'+plans.map(function(p){
+      var feats=(p.features||[]).map(function(f){return '<div style="font-size:13px;margin:5px 0;display:flex;gap:6px"><span>✅</span><span>'+esc(f)+'</span></div>';}).join('');
+      return '<div style="border:1px solid var(--primary);border-radius:14px;padding:14px;margin-bottom:12px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center"><div style="font-weight:800;font-size:16px">'+esc(p.name)+'</div>'+
+        '<div style="font-weight:800;color:var(--primary)">'+fmtPrice(p.price)+'<span style="font-size:11px;color:var(--hint);font-weight:400">/'+(p.duration_days||30)+' kun</span></div></div>'+
+        '<div style="margin:10px 0">'+feats+'</div>'+
+        '<button onclick="doSubscribe('+p.id+')" style="width:100%;padding:12px;border:none;border-radius:10px;background:linear-gradient(135deg,#6d28d9,#4f46e5);color:#fff;font-weight:700;cursor:pointer">💎 Obuna olish</button>'+
+      '</div>';
+    }).join('')+'<div style="font-size:11px;color:var(--hint);background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:10px">⚠️ Online to\'lov tez orada. Hozircha so\'rovingiz adminга boradi va tasdiqlangach obuna faollashadi.</div>';
+  }).catch(function(){});
+}
+function doSubscribe(planId){
+  fetch('/api/catalog/subscribe',{method:'POST',headers:_tgHeaders({'Content-Type':'application/json'}),body:JSON.stringify({uid:UID,plan_id:planId})})
+    .then(function(r){return r.json();}).then(function(d){
+      var m=(d&&d.ok)?'✅ Obuna so\'rovingiz yuborildi! Admin tasdiqlagach faollashadi.':((d&&d.error)?'Faqat do\'kon egasi obuna oladi':'Xato');
+      if(tg&&tg.showAlert){try{tg.showAlert(m);}catch(e){alert(m);}}else alert(m);
+      if(d&&d.ok) document.getElementById('sub-panel').classList.remove('on');
+    }).catch(function(){ alert('Tarmoq xatosi'); });
+}
+// Gating: sotuv harakatida obuna kerak bo'lsa chaqiriladi
+function subRequired(){
+  var m='💎 Sotuvni davom ettirish uchun obuna kerak. Rejani tanlang.';
+  if(tg&&tg.showAlert){try{tg.showAlert(m);}catch(e){}}
+  openSubscription();
 }
 
 // ── 👤 Sotuvchi konteksti (ega / menejer / operator) ─────────────────────────
@@ -3558,6 +3613,7 @@ function draftAction(id, action){
   fetch('/api/catalog/draft/save',{method:'POST',headers:_tgHeaders({'Content-Type':'application/json'}),body:JSON.stringify(body)})
     .then(function(r){return r.json();}).then(function(d){
       if(d&&d.ok){ loadDrafts(); if(action==='publish'){ var m='✅ Mahsulot sotuvga qo\'yildi'; if(tg&&tg.showAlert){try{tg.showAlert(m);}catch(e){}} } }
+      else if(d&&d.error==='subscription_required'){ subRequired(); }
       else { alert((d&&d.error==='price_required')?'Narxni kiriting':'Xato'); }
     }).catch(function(){ alert('Tarmoq xatosi'); });
 }
@@ -4271,6 +4327,7 @@ function saveProduct() {
     btn.disabled=false; btn.textContent='💾 Saqlash';
     console.log('[SP] ok='+d.ok+' err='+d.error);
     if(d.ok){closeForm();showSuccessCard(d.product_id,d.article_code,name,price,unit);loadCatalog();loadMy();}
+    else if(d.error==='subscription_required'){ closeForm(); subRequired(); }
     else{alert('❌ '+(d.error||'Xato'));}
   }).catch(function(e){
     btn.disabled=false; btn.textContent='💾 Saqlash';
