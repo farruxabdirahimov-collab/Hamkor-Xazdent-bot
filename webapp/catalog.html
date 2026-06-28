@@ -1212,6 +1212,14 @@ body{
           <input type="radio" name="ddays" value="15-30" style="accent-color:#f59e0b"> ⏳ 15-30 kun
         </label>
       </div>
+      <div style="font-size:11px;color:var(--hint);margin:12px 0 6px;font-weight:600">⚡ O'Z VILOYATINGIZ ICHIDA (tez yetkazish)</div>
+      <div style="font-size:11px;color:var(--hint);margin-bottom:6px">Mijoz siz bilan bir viloyatda bo'lsa shu muddat ko'rsatiladi. Bo'sh qoldirsangiz — standart muddat.</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button type="button" class="leta-b" onclick="setLeta('2 soat',this)" style="flex:1;min-width:70px;padding:8px;border:1.5px solid var(--border);border-radius:9px;background:none;color:var(--text);cursor:pointer;font-size:12px">⚡ 2 soat</button>
+        <button type="button" class="leta-b" onclick="setLeta('Oʻsha kuni',this)" style="flex:1;min-width:70px;padding:8px;border:1.5px solid var(--border);border-radius:9px;background:none;color:var(--text);cursor:pointer;font-size:12px">📦 Oʻsha kuni</button>
+        <button type="button" class="leta-b" onclick="setLeta('1 kun',this)" style="flex:1;min-width:70px;padding:8px;border:1.5px solid var(--border);border-radius:9px;background:none;color:var(--text);cursor:pointer;font-size:12px">1 kun</button>
+      </div>
+      <input id="f-leta" placeholder="Boshqa (masalan: 3 soat) yoki bo'sh" style="width:100%;box-sizing:border-box;margin-top:8px;padding:10px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg,#fff);color:inherit;font-size:13px">
     </div>
     <div style="margin-bottom:14px;display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px">
       <input type="checkbox" id="f-inst" style="width:18px;height:18px;accent-color:#8b5cf6">
@@ -1795,12 +1803,16 @@ document.querySelectorAll('.cat-chk').forEach(function(lbl) {
 
 function deliveryBadge(p){
   var b='';
-  if(p.delivery_type==='china') b+='<span class="dbadge china">🌍 '+p.delivery_days+' kun</span>';
-  else b+='<span class="dbadge local">🟢 '+p.delivery_days+' kun</span>';
+  if(p.fast) b+='<span class="dbadge local">⚡ '+esc(p.delivery_eta||'Tez')+'</span>';
+  else if(p.delivery_type==='china') b+='<span class="dbadge china">🌍 '+esc(p.delivery_eta||((p.delivery_days||'')+' kun'))+'</span>';
+  else b+='<span class="dbadge local">🟢 '+esc(p.delivery_eta||((p.delivery_days||'')+' kun'))+'</span>';
   if(p.installment) b+='<span class="dbadge inst">💳</span>';
   return '<div class="dbadges">'+b+'</div>';
 }
 function adBadge(p){ return (p&&p.is_ad)?'<span style="position:absolute;top:6px;left:6px;background:linear-gradient(135deg,#6d28d9,#4f46e5);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;z-index:2">📢 Reklama</span>':''; }
+function setLeta(v,btn){ var i=document.getElementById('f-leta'); if(i) i.value=v;
+  document.querySelectorAll('.leta-b').forEach(function(b){b.style.borderColor='var(--border)';b.style.color='var(--text)';});
+  if(btn){ btn.style.borderColor='var(--primary)'; btn.style.color='var(--primary)'; } }
 function deliveryBadgeFull(p){
   var b='';
   if(p.delivery_type==='china') b+='<span class="dbadge china">🌍 Global bozor · '+p.delivery_days+' kun</span>';
@@ -4311,11 +4323,13 @@ function saveProduct() {
   var delivery_type = (document.querySelector('input[name="dtype"]:checked')||{value:'local'}).value;
   var delivery_days = (document.querySelector('input[name="ddays"]:checked')||{value:'2-3'}).value;
   var installment   = document.getElementById('f-inst') && document.getElementById('f-inst').checked ? 1 : 0;
+  var local_eta = (document.getElementById('f-leta')||{value:''}).value.trim().slice(0,40);
   var payload={user_id:UID,name:name,price:price,unit:unit,stock:stock,
     description:desc,category_id:cats[0],categories:cats,
     images:images64,variants:variants,
     delivery_type:delivery_type,
     delivery_days:delivery_days,
+    local_eta:local_eta,
     installment:installment};
   var btn=document.getElementById('fsave');
   btn.disabled=true; btn.textContent='⏳ Saqlanmoqda...';
