@@ -66,11 +66,19 @@ def notify(text, level="INFO"):
 class TelegramLogHandler(logging.Handler):
     """ERROR+ darajadagi loglarni log-guruhga uzatadi —
     kоddagi mavjud log.error/log.exception larni avtomatik tutadi."""
+    # O'tkinchi polling/tarmoq xatolari — log-guruhga YUBORILMAYDI (o'zi tiklanadi, shovqin)
+    _SKIP = ("failed to fetch updates", "flood control", "retry after", "retryafter",
+             "bad gateway", "telegramservererror", "telegramnetworkerror",
+             "timed out", "connection reset", "temporary failure", "conflict: terminated")
+
     def emit(self, record):
         try:
             if record.levelno < logging.ERROR:
                 return
             msg = record.getMessage()
+            _low = (msg or "").lower()
+            if any(s in _low for s in self._SKIP):
+                return
             if record.exc_info:
                 import traceback
                 msg += "\n" + "".join(traceback.format_exception(*record.exc_info))[:1500]
