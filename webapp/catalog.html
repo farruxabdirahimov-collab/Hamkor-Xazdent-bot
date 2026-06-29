@@ -2741,9 +2741,11 @@ function openSellerBot(){
   var url=(window._prof&&window._prof.seller_bot_url)||'';
   if(url){
     if(tg&&tg.openTelegramLink){ try{ tg.openTelegramLink(url); return; }catch(e){} }
-    window.open(url,'_blank'); return;
+    // Brauzer: window.open ba'zan bloklanadi — location.href bilan zaxira
+    try{ var w=window.open(url,'_blank'); if(!w){ location.href=url; } }catch(e){ location.href=url; }
+    return;
   }
-  var m='Sotuvchi bo\'lish uchun qo\'llab-quvvatlash bilan bog\'laning.';
+  var m='Sotuvchi bot havolasi topilmadi. Qo\'llab-quvvatlash bilan bog\'lanamiz.';
   if(tg&&tg.showAlert){ try{ tg.showAlert(m);}catch(e){ alert(m);} } else { alert(m); }
   openSupport();
 }
