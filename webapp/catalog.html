@@ -3006,10 +3006,12 @@ function openBusiness(){
 }
 function saveBusiness(){
   var g=function(id){ return (document.getElementById(id).value||'').trim(); };
-  var stir=g('bz-stir').replace(/\D/g,''), mfo=g('bz-mfo').replace(/\D/g,''), acc=g('bz-acc').replace(/\D/g,'');
-  if(stir && stir.length!==9){ alert('STIR 9 ta raqam bo\'lishi kerak'); return; }
-  if(mfo && mfo.length!==5){ alert('MFO 5 ta raqam bo\'lishi kerak'); return; }
-  if(acc && acc.length!==20){ alert('Hisob raqami 20 ta raqam bo\'lishi kerak'); return; }
+  var rStir=g('bz-stir'), rMfo=g('bz-mfo'), rAcc=g('bz-acc');
+  var stir=rStir.replace(/\D/g,''), mfo=rMfo.replace(/\D/g,''), acc=rAcc.replace(/\D/g,'');
+  // RAW maydon bo'sh bo'lmasa — faqat raqam VA aniq uzunlik bo'lsin (harf/aralash rad etiladi)
+  if(rStir && (!/^\d+$/.test(rStir) || stir.length!==9)){ alert('STIR faqat 9 ta RAQAM bo\'lishi kerak'); return; }
+  if(rMfo && (!/^\d+$/.test(rMfo) || mfo.length!==5)){ alert('MFO faqat 5 ta RAQAM bo\'lishi kerak'); return; }
+  if(rAcc && (!/^\d+$/.test(rAcc) || acc.length!==20)){ alert('Hisob raqami faqat 20 ta RAQAM bo\'lishi kerak'); return; }
   fetch('/api/catalog/business/save',{method:'POST',headers:_tgHeaders({'Content-Type':'application/json'}),body:JSON.stringify({
     uid:UID,entity_type:g('bz-entity'),legal_name:g('bz-name'),stir:stir,bank_account:acc,mfo:mfo,
     bank_name:g('bz-bank'),legal_address:g('bz-addr'),director:g('bz-dir')})})
