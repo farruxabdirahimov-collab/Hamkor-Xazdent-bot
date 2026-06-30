@@ -1220,6 +1220,12 @@ body{
         <button type="button" class="leta-b" onclick="setLeta('1 kun',this)" style="flex:1;min-width:70px;padding:8px;border:1.5px solid var(--border);border-radius:9px;background:none;color:var(--text);cursor:pointer;font-size:12px">1 kun</button>
       </div>
       <input id="f-leta" placeholder="Boshqa (masalan: 3 soat) yoki bo'sh" style="width:100%;box-sizing:border-box;margin-top:8px;padding:10px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg,#fff);color:inherit;font-size:13px">
+      <div style="font-size:11px;color:var(--hint);margin:14px 0 6px;font-weight:600">🆓 BEPUL YETKAZIB BERISH — qaysi hududlarga?</div>
+      <div style="font-size:11px;color:var(--hint);margin-bottom:6px">Tanlangan hududlardagi mijozlarga "Bepul yetkazib berish" ko'rinadi. Hech narsa tanlamasangiz — bepul emas.</div>
+      <label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer;margin-bottom:8px">
+        <input type="checkbox" id="f-free-all" onchange="toggleFreeAll(this)" style="width:18px;height:18px;accent-color:#10b981"> 🇺🇿 Butun O'zbekiston bo'ylab bepul
+      </label>
+      <div id="f-freeregions" style="display:flex;gap:6px;flex-wrap:wrap"></div>
     </div>
     <div style="margin-bottom:14px;display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px">
       <input type="checkbox" id="f-inst" style="width:18px;height:18px;accent-color:#8b5cf6">
@@ -1806,6 +1812,7 @@ function deliveryBadge(p){
   if(p.fast) b+='<span class="dbadge local">⚡ '+esc(p.delivery_eta||'Tez')+'</span>';
   else if(p.delivery_type==='china') b+='<span class="dbadge china">🌍 '+esc(p.delivery_eta||((p.delivery_days||'')+' kun'))+'</span>';
   else b+='<span class="dbadge local">🟢 '+esc(p.delivery_eta||((p.delivery_days||'')+' kun'))+'</span>';
+  if(p.free_delivery) b+='<span class="dbadge local" style="background:rgba(16,185,129,.15);color:#10b981">🆓 Bepul</span>';
   if(p.installment) b+='<span class="dbadge inst">💳</span>';
   return '<div class="dbadges">'+b+'</div>';
 }
@@ -1813,6 +1820,28 @@ function adBadge(p){ return (p&&p.is_ad)?'<span style="position:absolute;top:6px
 function setLeta(v,btn){ var i=document.getElementById('f-leta'); if(i) i.value=v;
   document.querySelectorAll('.leta-b').forEach(function(b){b.style.borderColor='var(--border)';b.style.color='var(--text)';});
   if(btn){ btn.style.borderColor='var(--primary)'; btn.style.color='var(--primary)'; } }
+// 🆓 Bepul yetkazish hududlari (chiplar)
+function renderFreeRegions(selected){
+  var box=document.getElementById('f-freeregions'); if(!box) return;
+  var sel=(selected==='all')?[]:String(selected||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
+  document.getElementById('f-free-all').checked=(selected==='all');
+  fetch('/api/regions').then(function(r){return r.json();}).then(function(d){
+    var regs=Object.keys((d&&d.regions)||{});
+    box.innerHTML=regs.map(function(rn){
+      var on=sel.indexOf(rn)>=0;
+      return '<button type="button" class="freg-b" data-r="'+esc(rn)+'" data-on="'+(on?1:0)+'" onclick="toggleFreg(this)" style="padding:7px 10px;border:1.5px solid '+(on?'var(--green,#10b981)':'var(--border)')+';border-radius:9px;background:none;color:'+(on?'var(--green,#10b981)':'var(--text)')+';cursor:pointer;font-size:12px">'+esc(rn)+'</button>';
+    }).join('');
+    toggleFreeAll(document.getElementById('f-free-all'));
+  }).catch(function(){});
+}
+function toggleFreg(btn){ var on=btn.getAttribute('data-on')==='1'; on=!on; btn.setAttribute('data-on',on?1:0);
+  btn.style.borderColor=on?'var(--green,#10b981)':'var(--border)'; btn.style.color=on?'var(--green,#10b981)':'var(--text)'; }
+function toggleFreeAll(cb){ var dim=cb&&cb.checked; document.querySelectorAll('.freg-b').forEach(function(b){ b.style.opacity=dim?'0.4':'1'; b.style.pointerEvents=dim?'none':'auto'; }); }
+function getFreeRegions(){
+  if(document.getElementById('f-free-all') && document.getElementById('f-free-all').checked) return 'all';
+  var out=[]; document.querySelectorAll('.freg-b').forEach(function(b){ if(b.getAttribute('data-on')==='1') out.push(b.getAttribute('data-r')); });
+  return out.join(',');
+}
 function deliveryBadgeFull(p){
   var b='';
   if(p.delivery_type==='china') b+='<span class="dbadge china">🌍 Global bozor · '+p.delivery_days+' kun</span>';
@@ -4199,6 +4228,7 @@ function openForm() {
     requirePhone(function(){ openForm(); }); return;
   }
   document.getElementById('fpanel').classList.add('on');
+  try{ renderFreeRegions(''); }catch(e){}   // 🆓 bepul-hudud chiplarini chizamiz
   // Kategoriya va filter tablari formanin ustiga chiqmasin
   var cw = document.querySelector('.cats-wrap');
   if(cw) cw.style.visibility = 'hidden';
@@ -4328,12 +4358,14 @@ function saveProduct() {
   var delivery_days = (document.querySelector('input[name="ddays"]:checked')||{value:'2-3'}).value;
   var installment   = document.getElementById('f-inst') && document.getElementById('f-inst').checked ? 1 : 0;
   var local_eta = (document.getElementById('f-leta')||{value:''}).value.trim().slice(0,40);
+  var free_regions = (typeof getFreeRegions==='function') ? getFreeRegions() : '';
   var payload={user_id:UID,name:name,price:price,unit:unit,stock:stock,
     description:desc,category_id:cats[0],categories:cats,
     images:images64,variants:variants,
     delivery_type:delivery_type,
     delivery_days:delivery_days,
     local_eta:local_eta,
+    free_regions:free_regions,
     installment:installment};
   var btn=document.getElementById('fsave');
   btn.disabled=true; btn.textContent='⏳ Saqlanmoqda...';
