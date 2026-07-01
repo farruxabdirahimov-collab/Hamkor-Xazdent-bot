@@ -1005,6 +1005,19 @@ body{
       </label>
     </div>
 
+    <div class="flabel">⚡ O'z viloyati ichida (tez yetkazish)</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+      <button type="button" class="eleta-b" onclick="setELeta('2 soat',this)" style="flex:1;min-width:70px;padding:8px;border:1.5px solid var(--border);border-radius:9px;background:none;color:var(--text);cursor:pointer;font-size:12px">⚡ 2 soat</button>
+      <button type="button" class="eleta-b" onclick="setELeta('Oʻsha kuni',this)" style="flex:1;min-width:70px;padding:8px;border:1.5px solid var(--border);border-radius:9px;background:none;color:var(--text);cursor:pointer;font-size:12px">📦 Oʻsha kuni</button>
+      <button type="button" class="eleta-b" onclick="setELeta('1 kun',this)" style="flex:1;min-width:70px;padding:8px;border:1.5px solid var(--border);border-radius:9px;background:none;color:var(--text);cursor:pointer;font-size:12px">1 kun</button>
+    </div>
+    <input id="e-leta" placeholder="Boshqa yoki bo'sh" style="width:100%;box-sizing:border-box;margin-bottom:12px;padding:10px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg,#fff);color:inherit;font-size:13px">
+    <div class="flabel">🆓 Bepul yetkazish — qaysi hududlarga?</div>
+    <label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer;margin-bottom:8px">
+      <input type="checkbox" id="e-free-all" onchange="toggleEFreeAll(this)" style="width:18px;height:18px;accent-color:#10b981"> 🇺🇿 Butun O'zbekiston bepul
+    </label>
+    <div id="e-freeregions" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"></div>
+
     <div style="margin-bottom:14px;display:flex;align-items:center;gap:10px;
       padding:10px 12px;border:1.5px solid var(--border);border-radius:10px">
       <input type="checkbox" id="e-inst" style="width:18px;height:18px;accent-color:#8b5cf6">
@@ -1842,6 +1855,26 @@ function getFreeRegions(){
   var out=[]; document.querySelectorAll('.freg-b').forEach(function(b){ if(b.getAttribute('data-on')==='1') out.push(b.getAttribute('data-r')); });
   return out.join(',');
 }
+// ── Tahrirlash formasi uchun (bepul/tez) ─────────────────────────────────────
+function setELeta(v,btn){ var i=document.getElementById('e-leta'); if(i) i.value=v;
+  document.querySelectorAll('.eleta-b').forEach(function(b){b.style.borderColor='var(--border)';b.style.color='var(--text)';});
+  if(btn){ btn.style.borderColor='var(--primary)'; btn.style.color='var(--primary)'; } }
+function renderEFree(selected){
+  var box=document.getElementById('e-freeregions'); if(!box) return;
+  var isAll=(selected==='all'); var sel=isAll?[]:String(selected||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
+  var af=document.getElementById('e-free-all'); if(af) af.checked=isAll;
+  fetch('/api/regions').then(function(r){return r.json();}).then(function(d){
+    var regs=Object.keys((d&&d.regions)||{});
+    box.innerHTML=regs.map(function(rn){ var on=sel.indexOf(rn)>=0;
+      return '<button type="button" class="efreg-b" data-r="'+esc(rn)+'" data-on="'+(on?1:0)+'" onclick="toggleEFreg(this)" style="padding:7px 10px;border:1.5px solid '+(on?'var(--green,#10b981)':'var(--border)')+';border-radius:9px;background:none;color:'+(on?'var(--green,#10b981)':'var(--text)')+';cursor:pointer;font-size:12px">'+esc(rn)+'</button>';
+    }).join(''); toggleEFreeAll(af);
+  }).catch(function(){});
+}
+function toggleEFreg(btn){ var on=btn.getAttribute('data-on')==='1'; on=!on; btn.setAttribute('data-on',on?1:0);
+  btn.style.borderColor=on?'var(--green,#10b981)':'var(--border)'; btn.style.color=on?'var(--green,#10b981)':'var(--text)'; }
+function toggleEFreeAll(cb){ var dim=cb&&cb.checked; document.querySelectorAll('.efreg-b').forEach(function(b){ b.style.opacity=dim?'0.4':'1'; b.style.pointerEvents=dim?'none':'auto'; }); }
+function getEFree(){ if(document.getElementById('e-free-all')&&document.getElementById('e-free-all').checked) return 'all';
+  var out=[]; document.querySelectorAll('.efreg-b').forEach(function(b){ if(b.getAttribute('data-on')==='1') out.push(b.getAttribute('data-r')); }); return out.join(','); }
 function deliveryBadgeFull(p){
   var b='';
   if(p.delivery_type==='china') b+='<span class="dbadge china">🌍 Global bozor · '+p.delivery_days+' kun</span>';
@@ -3765,6 +3798,10 @@ function openEdit(pid){
       // Installment
       var inst = document.getElementById('e-inst');
       if(inst) inst.checked = !!p.installment;
+      // Tez yetkazish (o'z viloyati) + bepul hududlar
+      var eleta=document.getElementById('e-leta'); if(eleta) eleta.value = p.local_eta||'';
+      document.querySelectorAll('.eleta-b').forEach(function(b){b.style.borderColor='var(--border)';b.style.color='var(--text)';});
+      try{ renderEFree(p.free_regions||''); }catch(e){}
       // Variantlar
       _editVarCount = 0;
       var veditor = document.getElementById('e-var-editor');
@@ -3851,6 +3888,8 @@ function saveEdit(){
       name: name, price: price, unit: unit,
       stock: stock, description: desc,
       delivery_type: dType, delivery_days: dDays,
+      local_eta: (document.getElementById('e-leta')||{value:''}).value.trim().slice(0,40),
+      free_regions: (typeof getEFree==='function'? getEFree() : ''),
       installment: inst, variants: variants
     })
   }).then(function(r){return r.json();}).then(function(d){
