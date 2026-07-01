@@ -2018,13 +2018,17 @@ function _safeAlert(msg){
   try{ if(window.tg && tg.showAlert){ tg.showAlert(msg); return; } }catch(e){}
   try{ alert(msg); }catch(e){}
 }
-// Ombor (stok) chegarasi. maxStock>0 bo'lsa o'shandan oshmaydi (0 = cheksiz).
+// Ombor (stok) chegarasi. maxStock>0 bo'lsa o'shandan oshmaydi (0 = cheksiz, lekin HARD_MAX bor).
+var _HARD_MAX_QTY = 10000;
 function _capQty(it, want){
+  if(!(want > 0)) want = 1;                       // manfiy/NaN himoyasi
+  want = Math.min(Math.floor(want), _HARD_MAX_QTY);
   var m = (it && it.maxStock && it.maxStock > 0) ? it.maxStock : 0;
   if(m && want > m){
     _safeAlert('⚠️ Omborda faqat '+m+' ta mavjud.');
     return m;
   }
+  if(want >= _HARD_MAX_QTY){ _safeAlert('⚠️ Maksimal '+_HARD_MAX_QTY+' ta.'); }
   return want;
 }
 
