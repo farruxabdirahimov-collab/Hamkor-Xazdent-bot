@@ -1951,12 +1951,66 @@ function initSellerNav() {
 
 // ── CATALOG ──────────────────────────────────────────────────────────────────
 var _catCtl = null;   // oldingi so'rovni bekor qilish uchun (race-condition himoyasi)
+var _catOffset = 0, _catHasMore = false, _catLoadingMore = false;   // pagination (E9)
+// Bitta mahsulot kartasi HTML (loadCatalog + loadMoreCatalog qayta ishlatadi)
+function prodCardHtml(p){
+  var BIG_CATS = [5, 6, 7];
+  var isBig = BIG_CATS.includes(p.category_id);
+  var inCart = cart[p.id] ? cart[p.id].qty : 0;
+  var firstPh = p.photos && p.photos[0];
+  var imgH = firstPh
+    ? '<img src="'+firstPh+'" onerror="this.parentNode.innerHTML=\'🦷\'">'
+    : (isBig ? '📦' : '🦷');
+  var hasVars = p.variants && p.variants.length > 0;
+  if (isBig) {
+    return '<div class="pcard big">'+
+      '<div class="pimg" onclick="openDetail('+p.id+')">'+favBtn(p)+adBadge(p)+imgH+'</div>'+
+      '<div class="pbody">'+
+        '<div>'+
+          '<div class="pname" onclick="openDetail('+p.id+')">'+esc(p.name)+'</div>'+
+          '<div class="pshop">✅ Tasdiqlangan sotuvchi</div>'+
+          (p.article_code?'<span class="pcode">'+esc(p.article_code)+'</span>':'')+
+        '</div>'+
+        '<div>'+
+          '<div class="pprice">'+(hasVars?'<span style="font-size:10px;color:var(--hint);font-weight:400">dan </span>':'')+minPriceStr(p)+' <span class="punit">'+curUnit(p.unit)+(hasVars?' ↑':'')+'</span></div>'+scarcityHtml(p)+
+          '<div style="display:flex;gap:8px;align-items:center;margin-top:8px">'+
+            '<button class="abtn" onclick="openDetail('+p.id+')" style="font-size:13px">Ko\'rish</button>'+
+            '<button class="share-btn" onclick="event.stopPropagation();shareProd('+p.id+')">📤</button>'+
+          '</div>'+
+        '</div>'+
+      '</div></div>';
+  }
+  return '<div class="pcard'+(p.is_archived?' card-archived':'')+'">'+
+    '<div class="pimg" onclick="openDetail('+p.id+')">'+favBtn(p)+adBadge(p)+imgH+'</div>'+
+    '<div class="pbody">'+
+      '<div class="pname" onclick="openDetail('+p.id+')">'+esc(p.name)+'</div>'+
+      '<div class="pshop">✅ Tasdiqlangan sotuvchi</div>'+
+      (p.article_code?'<span class="pcode">'+esc(p.article_code)+'</span>':'')+
+      '<div class="pprice">'+(hasVars?'<span style="font-size:10px;color:var(--hint);font-weight:400">dan </span>':'')+minPriceStr(p)+' <span class="punit">'+curUnit(p.unit)+(hasVars?' ↑':'')+'</span></div>'+scarcityHtml(p)+
+      deliveryBadge(p)+
+      '<div style="display:flex;gap:6px;align-items:center;margin-top:auto">'+
+        (ROLE!=='seller'?(
+          hasVars?
+            '<button class="abtn" onclick="openDetail('+p.id+')">Ko\'rish</button>':
+            '<div class="qty-row" id="qr-'+p.id+'" style="flex:1">'+renderQtyHtml(p.id,inCart)+'</div>'
+        ):'<button class="abtn" onclick="openDetail('+p.id+')">Ko\'rish</button>')+
+        '<button class="share-btn" onclick="event.stopPropagation();shareProd('+p.id+')">📤</button>'+
+      '</div>'+
+    '</div></div>';
+}
+
+function _moreBtnHtml(){
+  return '<div id="moreWrap" style="grid-column:1/-1;text-align:center;padding:14px 0">'+
+    '<button class="abtn" style="max-width:220px;margin:0 auto" onclick="loadMoreCatalog()">Ko\'proq yuklash ↓</button></div>';
+}
+
 function loadCatalog() {
   if(curSearch && curSearch.length >= 3){
     track('search',{query:curSearch,results_count:0});
   }
   document.getElementById('main').innerHTML = '<div class="loading"><div class="spin"></div></div>';
-  var _durl='/api/catalog?uid='+UID+'&cat='+curCat+'&q='+encodeURIComponent(curSearch);
+  _catOffset = 0; _catHasMore = false; _catLoadingMore = false;
+  var _durl='/api/catalog?uid='+UID+'&cat='+curCat+'&q='+encodeURIComponent(curSearch)+'&offset=0';
   if(curDelivery) _durl+='&delivery='+curDelivery;
   if(curInst) _durl+='&installment=1';
   // Oldingi (eskirgan) so'rovni bekor qilamiz — kech kelgan javob ekranni buzmasin
@@ -1968,61 +2022,16 @@ function loadCatalog() {
       if(d.usd_rate) { usdRate = d.usd_rate; usdUpdated = d.usd_updated || ''; }
       var prods = d.products || [];
       prods.forEach(function(p){ _prods[p.id] = p; });
+      _catHasMore = !!d.has_more;
+      _catOffset = (d.next_offset != null) ? d.next_offset : prods.length;
       if (!prods.length) {
         document.getElementById('main').innerHTML = '<div class="empty"><div class="empty-ic">🔍</div>Mahsulot topilmadi</div>';
         return;
       }
-      // Debug: mahsulot soni
-      console.log('[CATALOG] prods:', prods.length, 'first:', prods[0] && prods[0].name);
-      // BIG karta: Uskunalar(5), Rentgen(6), CAD/CAM(7)
-      var BIG_CATS = [5, 6, 7];
+      console.log('[CATALOG] prods:', prods.length, 'more:', _catHasMore);
       var html = '<div class="grid">';
-      prods.forEach(function(p) {
-        var isBig = BIG_CATS.includes(p.category_id);
-        var inCart = cart[p.id] ? cart[p.id].qty : 0;
-        var firstPh = p.photos && p.photos[0];
-        var imgH = firstPh
-          ? '<img src="'+firstPh+'" onerror="this.parentNode.innerHTML=\'🦷\'">'
-          : (isBig ? '📦' : '🦷');
-        var hasVars = p.variants && p.variants.length > 0;
-
-        if (isBig) {
-          html += '<div class="pcard big">'+
-            '<div class="pimg" onclick="openDetail('+p.id+')">'+favBtn(p)+adBadge(p)+imgH+'</div>'+
-            '<div class="pbody">'+
-              '<div>'+
-                '<div class="pname" onclick="openDetail('+p.id+')">'+esc(p.name)+'</div>'+
-                '<div class="pshop">✅ Tasdiqlangan sotuvchi</div>'+
-                (p.article_code?'<span class="pcode">'+esc(p.article_code)+'</span>':'')+
-              '</div>'+
-              '<div>'+
-                '<div class="pprice">'+(hasVars?'<span style="font-size:10px;color:var(--hint);font-weight:400">dan </span>':'')+minPriceStr(p)+' <span class="punit">'+curUnit(p.unit)+(hasVars?' ↑':'')+'</span></div>'+scarcityHtml(p)+
-                '<div style="display:flex;gap:8px;align-items:center;margin-top:8px">'+
-                  '<button class="abtn" onclick="openDetail('+p.id+')" style="font-size:13px">Ko\'rish</button>'+
-                  '<button class="share-btn" onclick="event.stopPropagation();shareProd('+p.id+')">📤</button>'+
-                '</div>'+
-              '</div>'+
-            '</div></div>';
-        } else {
-          html += '<div class="pcard'+(p.is_archived?' card-archived':'')+'">'+
-            '<div class="pimg" onclick="openDetail('+p.id+')">'+favBtn(p)+adBadge(p)+imgH+'</div>'+
-            '<div class="pbody">'+
-              '<div class="pname" onclick="openDetail('+p.id+')">'+esc(p.name)+'</div>'+
-              '<div class="pshop">✅ Tasdiqlangan sotuvchi</div>'+
-              (p.article_code?'<span class="pcode">'+esc(p.article_code)+'</span>':'')+
-              '<div class="pprice">'+(hasVars?'<span style="font-size:10px;color:var(--hint);font-weight:400">dan </span>':'')+minPriceStr(p)+' <span class="punit">'+curUnit(p.unit)+(hasVars?' ↑':'')+'</span></div>'+scarcityHtml(p)+
-              deliveryBadge(p)+
-              '<div style="display:flex;gap:6px;align-items:center;margin-top:auto">'+
-                (ROLE!=='seller'?(
-                  hasVars?
-                    '<button class="abtn" onclick="openDetail('+p.id+')">Ko\'rish</button>':
-                    '<div class="qty-row" id="qr-'+p.id+'" style="flex:1">'+renderQtyHtml(p.id,inCart)+'</div>'
-                ):'<button class="abtn" onclick="openDetail('+p.id+')">Ko\'rish</button>')+
-                '<button class="share-btn" onclick="event.stopPropagation();shareProd('+p.id+')">📤</button>'+
-              '</div>'+
-            '</div></div>';
-        }
-      });
+      prods.forEach(function(p){ html += prodCardHtml(p); });
+      if(_catHasMore) html += _moreBtnHtml();
       html += '</div>';
       try {
         document.getElementById('main').innerHTML = html;
@@ -2035,6 +2044,35 @@ function loadCatalog() {
       console.error('[CATALOG ERROR]', e);
       document.getElementById('main').innerHTML = '<div class="empty">❌ '+esc(e.message)+'</div>';
     });
+}
+
+// "Ko'proq yuklash" — keyingi sahifani mavjud gridga qo'shadi
+function loadMoreCatalog(){
+  if(_catLoadingMore || !_catHasMore) return;
+  _catLoadingMore = true;
+  var btn = document.querySelector('#moreWrap button');
+  if(btn){ btn.disabled = true; btn.textContent = 'Yuklanmoqda…'; }
+  var _durl='/api/catalog?uid='+UID+'&cat='+curCat+'&q='+encodeURIComponent(curSearch)+'&offset='+_catOffset;
+  if(curDelivery) _durl+='&delivery='+curDelivery;
+  if(curInst) _durl+='&installment=1';
+  fetch(_durl).then(function(r){return r.json();}).then(function(d){
+    var prods = d.products || [];
+    prods.forEach(function(p){ _prods[p.id] = p; });
+    _catHasMore = !!d.has_more;
+    _catOffset = (d.next_offset != null) ? d.next_offset : (_catOffset + prods.length);
+    var grid = document.querySelector('#main .grid');
+    var wrap = document.getElementById('moreWrap');
+    if(wrap && wrap.parentNode) wrap.parentNode.removeChild(wrap);
+    if(grid){
+      var frag = '';
+      prods.forEach(function(p){ frag += prodCardHtml(p); });
+      if(_catHasMore) frag += _moreBtnHtml();
+      grid.insertAdjacentHTML('beforeend', frag);
+    }
+  }).catch(function(e){
+    console.error('[CATALOG MORE ERROR]', e);
+    if(btn){ btn.disabled=false; btn.textContent='Ko\'proq yuklash ↓'; }
+  }).then(function(){ _catLoadingMore = false; });
 }
 
 function renderQtyHtml(pid, inCart) {
