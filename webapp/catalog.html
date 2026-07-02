@@ -2487,14 +2487,40 @@ function detQuick() {
   } else {
     items.push({size_name:null, qty:detQty});
   }
+  var _p = p, _pid = detPid, _items = items.slice();
   closeDp(); varSelections = {};
   fetch('/api/catalog/quick_order_direct', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({product_id:detPid, user_id:UID, items:items})
+    body:JSON.stringify({product_id:_pid, user_id:UID, items:_items})
   }).then(function(r){return r.json();}).then(function(d){
     if (d.ok) { if(tg) tg.showAlert('✅ Buyurtma #'+d.order_id+' yuborildi!\nSotuvchi tez orada bog\'lanadi.'); }
-    else { if(tg) tg.showAlert('❌ '+(d.error||'Xato')); }
+    else if (d.error === 'address_required') {
+      // Manzil yo'q — mahsulotni savatga solib, checkout (manzil yig'ish) oqimiga o'tkazamiz
+      _quickToCart(_p, _pid, _items);
+      openCart();
+      _safeAlert('📍 Yetkazish manzilingizni kiriting — buyurtma savat orqali rasmiylashtiriladi.');
+    }
+    else { if(tg) tg.showAlert('❌ '+(d.message || d.error || 'Xato')); }
+  }).catch(function(){ _safeAlert('❌ Tarmoq xatosi'); });
+}
+
+// Tezkor buyurtma itemlarini savatga solish (manzil yo'q bo'lsa fallback)
+function _quickToCart(p, pid, items){
+  items.forEach(function(it){
+    var name = it.size_name;
+    if (name) {
+      var key = pid+'_v_'+name;
+      var pr = it.price || p.price;
+      var vArt = '', vStock = 0;
+      (p.variants||[]).forEach(function(v){ if(v.size_name===name){ if(v.article) vArt=v.article; vStock=v.stock||0; } });
+      var pCopy = Object.assign({}, p, {price:pr});
+      if (vArt) pCopy.article_code = vArt;
+      cart[key] = {product:pCopy, variantId:name, qty:it.qty, key:key, maxStock:vStock};
+    } else {
+      cart[pid] = {product:p, qty:it.qty, maxStock:p.stock||0};
+    }
   });
+  updateCartBadge();
 }
 
 // ── ULASHISH & QR ────────────────────────────────────────────────────────────
