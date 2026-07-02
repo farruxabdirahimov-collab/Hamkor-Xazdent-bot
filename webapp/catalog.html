@@ -370,6 +370,9 @@ body{
 .fsave:disabled{opacity:.4}
 .fcancel{width:100%;padding:12px;border:none;background:transparent;
   color:var(--hint);font-size:14px;cursor:pointer;margin-top:6px}
+.ltab{flex:0 0 auto;padding:8px 12px;border:1px solid var(--border);border-radius:20px;
+  background:transparent;color:var(--hint);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.ltab.on{background:var(--primary);color:#fff;border-color:var(--primary)}
 
 /* SUCCESS CARD */
 .success-card{background:var(--card);border-radius:var(--r-xl);padding:20px;
@@ -1320,10 +1323,48 @@ body{
       <div class="ftitle" style="margin-bottom:0">📜 Maxfiylik va Shartlar</div>
       <button onclick="document.getElementById('privacy-panel').classList.remove('on')" style="width:32px;height:32px;border-radius:50%;border:none;background:var(--border);color:var(--text);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
     </div>
-    <div style="font-size:13px;color:var(--text);line-height:1.7">
-      <p style="margin-bottom:12px"><b>Maxfiylik siyosati.</b> XazDent sizning ma'lumotlaringizni (ism, telefon, manzil) faqat buyurtmalarni rasmiylashtirish va yetkazib berish uchun ishlatadi. Ma'lumotlaringiz uchinchi shaxslarga sotilmaydi.</p>
-      <p style="margin-bottom:12px"><b>Foydalanish shartlari.</b> Platforma stomatologik mahsulotlar uchun B2B bozor hisoblanadi. Buyurtma berish orqali siz sotuvchi bilan to'g'ridan-to'g'ri munosabatga rozilik bildirasiz. To'lov va yetkazib berish shartlari sotuvchi bilan kelishiladi.</p>
-      <p style="margin-bottom:12px"><b>Bog'lanish.</b> Savollar bo'lsa — profildagi "Yordam" bo'limi orqali biz bilan bog'laning.</p>
+    <div style="display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;-webkit-overflow-scrolling:touch">
+      <button class="ltab on" data-lt="oferta" onclick="legalTab('oferta',this)">📄 Oferta</button>
+      <button class="ltab" data-lt="maxfiylik" onclick="legalTab('maxfiylik',this)">🔒 Maxfiylik</button>
+      <button class="ltab" data-lt="yetkazish" onclick="legalTab('yetkazish',this)">🚚 Yetkazish & qaytarish</button>
+    </div>
+    <div style="font-size:13px;color:var(--text);line-height:1.7;max-height:62vh;overflow-y:auto;padding-right:4px">
+
+      <!-- ═══ OMMAVIY OFERTA ═══ -->
+      <div class="ltab-body" data-lt="oferta">
+        <p style="color:var(--hint);font-size:12px;margin-bottom:10px">Kuchga kirgan sana: 2026-yil 2-iyul · Oxirgi tahrir: 2026-yil 2-iyul</p>
+        <p style="margin-bottom:10px"><b>1. Umumiy qoidalar.</b> Ushbu Ommaviy oferta (keyingi o'rinlarda — «Oferta») «XazDent» onlayn platformasi (keyingi o'rinlarda — «Platforma») va undan foydalanuvchi jismoniy yoki yuridik shaxs (keyingi o'rinlarda — «Foydalanuvchi») o'rtasidagi rasmiy taklif hisoblanadi. Platformadan ro'yxatdan o'tish yoki foydalanish orqali Foydalanuvchi ushbu Oferta shartlariga to'liq rozilik bildiradi.</p>
+        <p style="margin-bottom:10px"><b>2. Platforma maqomi.</b> XazDent — stomatologik mahsulotlar va uskunalar uchun onlayn savdo maydonchasi (marketplace) bo'lib, <b>vositachi</b> sifatida faoliyat yuritadi. Platforma xaridorlar (klinikalar, zubtexniklar, mutaxassislar) va sotuvchilar (hamkorlar)ni bog'laydi. Platformaning o'zi mahsulot sotuvchisi hisoblanmaydi va oldi-sotdi bitimining tarafi emas — bitim xaridor va sotuvchi o'rtasida tuziladi.</p>
+        <p style="margin-bottom:10px"><b>3. Anonimlik.</b> Platforma tomonlar o'rtasidagi yagona bog'lovchi bo'lib xizmat qiladi. Xaridor va sotuvchi bir-birining ismi, telefon raqami yoki do'kon nomini ko'rmaydi. Sotuvchiga faqat buyurtmani yetkazish uchun zarur manzil ma'lumotlari beriladi.</p>
+        <p style="margin-bottom:10px"><b>4. Buyurtma va yetkazish.</b> Xaridor Platforma orqali buyurtma beradi; sotuvchi buyurtmani qabul qilib, kelishilgan usulda (sotuvchi yetkazishi, kuryer, BTS punkti yoki ofisga yetkazish) bajaradi. Yetkazish muddati va usuli mahsulot kartasida ko'rsatiladi.</p>
+        <p style="margin-bottom:10px"><b>5. To'lov.</b> Ayni paytda to'lov mahsulot yetkazilganda (naqd yoki karta orqali) yoki tomonlar kelishuviga muvofiq amalga oshiriladi. Onlayn to'lov tizimi keyinchalik ulanadi va bu haqda alohida xabar beriladi.</p>
+        <p style="margin-bottom:10px"><b>6. Sotuvchilar uchun obuna.</b> Sotuvchilar Platformada mahsulot joylashtirish va reklama qilish uchun obuna (tarif) tanlashi mumkin. Obuna shartlari va imkoniyatlari «Obuna» bo'limida ko'rsatiladi. Obuna hozircha administrator tomonidan faollashtiriladi.</p>
+        <p style="margin-bottom:10px"><b>7. Foydalanuvchi majburiyatlari.</b> Foydalanuvchi haqqoniy ma'lumot berishi; qonunga zid, qalbaki yoki xavfli mahsulotlarni joylashtirmasligi; boshqa foydalanuvchilar huquqlarini hurmat qilishi shart. Platforma qoidabuzarlik holatida hisobni cheklash yoki bloklash huquqini saqlab qoladi.</p>
+        <p style="margin-bottom:10px"><b>8. Javobgarlik.</b> Mahsulot sifati, tavsifga muvofiqligi va yetkazib berish uchun javobgarlik sotuvchi zimmasida. Platforma vositachi sifatida nizolarni hal qilishda ko'maklashadi, ammo bitim tarafi bo'lmagani uchun tovar sifati bo'yicha bevosita javobgar emas.</p>
+        <p style="margin-bottom:10px"><b>9. Nizolar.</b> Nizolar avval Platformaning «Yordam» bo'limi orqali muzokara yo'li bilan hal etiladi. Kelishuvga erishilmasa — O'zbekiston Respublikasi amaldagi qonunchiligiga muvofiq.</p>
+      </div>
+
+      <!-- ═══ MAXFIYLIK SIYOSATI ═══ -->
+      <div class="ltab-body" data-lt="maxfiylik" style="display:none">
+        <p style="margin-bottom:10px"><b>1. Qanday ma'lumot yig'amiz.</b> Platforma quyidagilarni yig'adi: ism (yoki tashkilot nomi), telefon raqami, yetkazish manzili va viloyat, Telegram identifikatori, elektron pochta (web orqali kirishda), buyurtmalar tarixi. Sotuvchilar uchun — biznes rekvizitlari (STIR, hisob raqami va h.k.).</p>
+        <p style="margin-bottom:10px"><b>2. Nima uchun ishlatamiz.</b> Ma'lumotlar faqat buyurtmalarni rasmiylashtirish, yetkazib berish, hisobni boshqarish, qo'llab-quvvatlash va xizmat sifatini yaxshilash uchun ishlatiladi.</p>
+        <p style="margin-bottom:10px"><b>3. Uchinchi shaxslar.</b> Sizning shaxsiy ma'lumotlaringiz uchinchi shaxslarga <b>sotilmaydi</b>. Ma'lumot faqat buyurtmani bajarish uchun zarur bo'lgan hajmda (masalan, yetkazish manzili — sotuvchiga) taqdim etiladi. Xaridor va sotuvchining shaxsiy aloqa ma'lumotlari bir-biriga oshkor qilinmaydi.</p>
+        <p style="margin-bottom:10px"><b>4. Saqlash va himoya.</b> Ma'lumotlar himoyalangan serverlarda saqlanadi va ruxsatsiz kirishdan himoyalanadi. Ma'lumotlar xizmat ko'rsatish uchun zarur muddat davomida saqlanadi.</p>
+        <p style="margin-bottom:10px"><b>5. Sizning huquqlaringiz.</b> Siz o'z ma'lumotlaringizni ko'rish, tuzatish yoki hisobingizni o'chirishni so'rash huquqiga egasiz. Buning uchun «Yordam» bo'limi orqali murojaat qiling.</p>
+        <p style="margin-bottom:10px"><b>6. Amaldagi qonun.</b> Shaxsga doir ma'lumotlarni qayta ishlash O'zbekiston Respublikasining «Shaxsga doir ma'lumotlar to'g'risida»gi qonuni talablariga muvofiq amalga oshiriladi.</p>
+      </div>
+
+      <!-- ═══ YETKAZIB BERISH VA QAYTARISH ═══ -->
+      <div class="ltab-body" data-lt="yetkazish" style="display:none">
+        <p style="margin-bottom:10px"><b>1. Yetkazish usullari.</b> Buyurtma quyidagi usullardan biri bilan yetkaziladi: sotuvchi o'zi yetkazishi, kuryer, BTS Express yoki BTS punktidan olib ketish, ofisga yetkazish. Mavjud usullar va muddat mahsulot kartasida ko'rsatiladi.</p>
+        <p style="margin-bottom:10px"><b>2. Yetkazish muddati.</b> Muddat sotuvchi va hududga bog'liq. Xaridor sotuvchi bilan bir viloyatda bo'lsa — tezroq (ba'zi hollarda 2 soat ichida) yetkazish mumkin. Aniq muddat mahsulotda ko'rsatiladi.</p>
+        <p style="margin-bottom:10px"><b>3. Yetkazish narxi.</b> Ayrim sotuvchilar tanlangan hududlarga bepul yetkazadi — bu mahsulot kartasida «Bepul yetkazish» belgisi bilan ko'rsatiladi. Aks holda yetkazish narxi sotuvchi bilan kelishiladi.</p>
+        <p style="margin-bottom:10px"><b>4. Qabul qilishda tekshirish.</b> Iltimos, mahsulotni qabul qilishda uni tekshiring. Nuqson, kamomad yoki tavsifga mos kelmaslik aniqlansa — darhol «Yordam» bo'limi orqali xabar bering.</p>
+        <p style="margin-bottom:10px"><b>5. Qaytarish va almashtirish.</b> Nuqsonli yoki tavsifga mos kelmaydigan mahsulot O'zbekiston Respublikasi «Iste'molchilar huquqlarini himoya qilish to'g'risida»gi qonuniga muvofiq qaytarilishi yoki almashtirilishi mumkin. Talab yetkazib berish tomoni (sotuvchi) bilan Platforma vositachiligida hal etiladi.</p>
+        <p style="margin-bottom:10px"><b>6. Baholash.</b> Buyurtma yakunlangach xaridor mahsulot va yetkazishni baholashi mumkin — bu boshqa xaridorlarга va xizmat sifatiga yordam beradi.</p>
+        <p style="margin-bottom:10px"><b>7. Bog'lanish.</b> Har qanday savol yoki muammo bo'yicha — profildagi «🆘 Yordam» bo'limi orqali biz bilan bog'laning.</p>
+      </div>
+
     </div>
     <button class="fcancel" onclick="document.getElementById('privacy-panel').classList.remove('on')">Yopish</button>
   </div>
@@ -3092,6 +3133,12 @@ function doLogout(){
   location.href=location.pathname;
 }
 function openPrivacy(){ document.getElementById('privacy-panel').classList.add('on'); }
+function legalTab(id, btn){
+  var panel = document.getElementById('privacy-panel');
+  if(!panel) return;
+  panel.querySelectorAll('.ltab').forEach(function(b){ b.classList.toggle('on', b===btn); });
+  panel.querySelectorAll('.ltab-body').forEach(function(d){ d.style.display = (d.getAttribute('data-lt')===id)?'block':'none'; });
+}
 
 // ── 🏢 Biznes ma'lumotlari ───────────────────────────────────────────────────
 function openBusiness(){
