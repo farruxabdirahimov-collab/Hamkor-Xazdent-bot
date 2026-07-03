@@ -3567,14 +3567,14 @@ function loadNews() {
           '<img src="'+p.photos[0]+'" loading="lazy">' : '<span>🦷</span>';
         html += '<div class="pcard" onclick="openDetail('+p.id+')">'+
           '<div class="pimg" style="position:relative">'+
-            favBtn(p)+
+            favBtn(p)+adBadge(p)+
+            '<span class="new-badge" style="position:absolute;top:6px;right:6px;margin:0;z-index:2">NEW</span>'+
             pimg+
-            '<span class="new-badge">NEW</span>'+
-            deliveryBadge(p)+
           '</div>'+
           '<div class="pbody">'+
             '<div class="pname">'+esc(p.name)+'</div>'+
             '<div class="pprice">'+fmtPrice(p.price)+' <span class="punit">'+curUnit(p.unit)+'</span></div>'+
+            deliveryBadge(p)+
             addCartBtn(p)+
           '</div>'+
         '</div>';
