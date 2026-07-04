@@ -71,6 +71,7 @@ body{
   font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;
   background:var(--bg);color:var(--text);
   padding-bottom:80px;min-height:100vh;
+  overflow-wrap:break-word;word-break:break-word;   /* uzun uzluksiz matn har joyda o'ralsin (gorizontal toshmasin) */
 }
 
 /* TOP */
@@ -134,7 +135,7 @@ body{
 
 /* GRID */
 .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:14px;padding-bottom:90px;z-index:1}
-#main{padding-bottom:80px}
+#main{padding-bottom:80px;overflow-x:hidden}
 /* Responsive grid */
 @media(min-width:600px){
   .grid{grid-template-columns:repeat(3,1fr);gap:12px;padding:16px;}
