@@ -19,7 +19,7 @@ LOGGER_BOT_TOKEN = os.getenv("LOGGER_BOT_TOKEN", "").strip()
 LOG_GROUP_ID     = os.getenv("LOG_GROUP_ID", "").strip()
 PROJECT_NAME     = os.getenv("PROJECT_NAME", "xazdent-backend").strip()
 
-_ICON = {"INFO": "ℹ️", "NEW": "🆕", "WARN": "⚠️", "ERROR": "🔴", "EVENT": "📌"}
+_ICON = {"INFO": "ℹ️", "NEW": "🆕", "WARN": "⚠️", "ERROR": "🔴", "EVENT": "📌", "ORDER": "🛒"}
 _recent = {}   # dedupe: (level, text) -> oxirgi yuborilgan vaqt
 
 

@@ -15,7 +15,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from app.runtime import bot, dp, router, buyer_bot
 from app.config import (BOT_TOKEN, CHANNEL_ID, ADMIN_IDS, WEBAPP_URL, BASE_DIR, AD_PRICE_TOSHKENT, AD_PRICE_REGION, AD_PRICE_BOTH_AUD, AD_REGION_PRICES, AD_REGION_DEFAULT)
-from app.database import (init_db, get_user, db_run, db_get, db_all, db_insert, get_setting, update_setting, add_balance, get_next_room_code, generate_order_number, log_order_event, get_or_create_trust_score, update_trust_score, update_seller_metrics, get_pool)
+from app.database import (init_db, get_user, db_run, db_get, db_all, db_insert, get_setting, update_setting, add_balance, get_next_room_code, generate_order_number, log_order_event, notify_order_event, get_or_create_trust_score, update_trust_score, update_seller_metrics, get_pool)
 from app.texts import t, REGIONS, REGIONS_RU
 from app.keyboards import (ib, ik, kb_cancel, kb_clinic, kb_confirm, kb_deadline, kb_delivery, kb_lang, kb_regions, kb_role, kb_seller, kb_shop_cats, kb_units, rk)
 from app.states import (AdState, AdminState, BulkState, CheckoutState, ComplaintState, MyProductsState, NeedState, OfferState, PhotoOrderState, QuickOrderState, RegState, ReviewState, ShopState, SupportState, TopupState)
@@ -125,6 +125,7 @@ async def _create_web_cart_order(msg, u, items_raw):
             "INSERT INTO catalog_orders(buyer_id,seller_id,products_json,total_amount) VALUES(?,?,?,?)",
             (uid, seller_id, _pj2.dumps(items, ensure_ascii=False), total)
         )
+        await notify_order_event(order_id, "new")
         # MAXFIYLIK: xaridor ismi/telefoni sotuvchiga BERILMAYDI — faqat yetkazish hududi
         msg_txt = (
             f"🌐 *Veb-saytdan buyurtma #{order_id}!*\n\n"
@@ -1072,6 +1073,7 @@ async def _send_quick_order(target_msg, state: FSMContext, qty: float, buyer_id:
         "INSERT INTO catalog_orders(buyer_id,seller_id,products_json,total_amount) VALUES(?,?,?,?)",
         (buyer_id, seller_id, _pj.dumps(items, ensure_ascii=False), total)
     )
+    await notify_order_event(order_id, "new")
 
     # MAXFIYLIK: xaridor ismi/telefoni sotuvchiga BERILMAYDI — faqat yetkazish hududi/manzili
     msg_txt = (
