@@ -55,21 +55,23 @@ def kb_seller(lg, uid=0, webapp_url=""):
         return rk(
             [KeyboardButton(text="🛍 Dental Market",
                            web_app=WebAppInfo(url=mkt_url))],
-            [KeyboardButton(text="➕ Mahsulot qo\'shish",
-                           web_app=WebAppInfo(url=add_url)),
-             KeyboardButton(text="🔔 Buyurtmalar")],
-            [KeyboardButton(text="💰 Hisobim"),
-             KeyboardButton(text="⚙️ Profil")],
-            [KeyboardButton(text="📖 Yordam")],
+            [KeyboardButton(text="🤖 AI bilan qo\'shish"),
+             KeyboardButton(text="➕ Mahsulot qo\'shish",
+                           web_app=WebAppInfo(url=add_url))],
+            [KeyboardButton(text="🔔 Buyurtmalar"),
+             KeyboardButton(text="💰 Hisobim")],
+            [KeyboardButton(text="⚙️ Profil"),
+             KeyboardButton(text="📖 Yordam")],
         )
     # Fallback — WebApp URL yo'q
     return rk(
         [KeyboardButton(text="🛍 Dental Market")],
-        [KeyboardButton(text="➕ Mahsulot qo\'shish"),
-         KeyboardButton(text="🔔 Buyurtmalar")],
-        [KeyboardButton(text="💰 Hisobim"),
-         KeyboardButton(text="⚙️ Profil")],
-        [KeyboardButton(text="📖 Yordam")],
+        [KeyboardButton(text="🤖 AI bilan qo\'shish"),
+         KeyboardButton(text="➕ Mahsulot qo\'shish")],
+        [KeyboardButton(text="🔔 Buyurtmalar"),
+         KeyboardButton(text="💰 Hisobim")],
+        [KeyboardButton(text="⚙️ Profil"),
+         KeyboardButton(text="📖 Yordam")],
     )
 
 def kb_regions(lg):

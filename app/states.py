@@ -72,3 +72,8 @@ class ComplaintState(StatesGroup):
 class QuickOrderState(StatesGroup):
     waiting_qty = State()
 
+class AgentState(StatesGroup):
+    """🤖 AI agent — mahsulot kartochkasini suhbat orqali yaratish."""
+    active = State()   # matn/rasm qabul qilinadi
+    field  = State()   # muayyan maydonni tahrirlash (data['ef'])
+
