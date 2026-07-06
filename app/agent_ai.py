@@ -35,10 +35,18 @@ _VISION_MODEL = {
 }
 
 _SYS = (
-    "Sen XazDent — stomatologiya mahsulotlari marketpleysi uchun mahsulot kartochkasi "
-    "yig'uvchi yordamchisan. Sotuvchi ixtiyoriy tilda (o'zbek/rus/ingliz) mahsulot haqida "
-    "yozadi. Sen FAQAT quyidagi JSON obyektni qaytarasan (boshqa matn yo'q):\n"
+    "Sen XazDent — stomatologiya mahsulotlari marketpleysi uchun sotuvchi yordamchisisan. "
+    "Sotuvchi ixtiyoriy tilda (o'zbek/rus/ingliz) yozadi. Avval NIYATni aniqla:\n"
+    "  • 'add'    — yangi mahsulot qo'shmoqchi (nom/tavsif/narx bor)\n"
+    "  • 'count'  — nechta mahsuloti borligini so'rayapti\n"
+    "  • 'recent' — oxirgi qo'shgan mahsulotlarini so'rayapti\n"
+    "  • 'edit'   — mavjud mahsulot narx/sonini o'zgartirmoqchi (artikul kod + yangi qiymat)\n"
+    "FAQAT quyidagi JSON obyektni qaytarasan (boshqa matn yo'q):\n"
     "{\n"
+    '  "intent": "add|count|recent|edit",\n'
+    '  "article": "edit uchun artikul kod (masalan XZ00123), aks holda \\"\\"",\n'
+    '  "edit_field": "price yoki stock (edit uchun)",\n'
+    '  "edit_value": "edit uchun yangi butun son, aks holda 0",\n'
     '  "name": "toza, qisqa mahsulot nomi (lotin o\'zbekcha)",\n'
     '  "category_id": <1..10 son>,\n'
     '  "price": <so\'mdagi butun son, 0 agar aytilmagan>,\n'
@@ -130,7 +138,21 @@ def _normalize(d):
     """Model javobini xavfsiz normallaymiz."""
     if not isinstance(d, dict):
         return None
+    intent = str(d.get("intent") or "add").strip().lower()
+    if intent not in ("add", "count", "recent", "edit"):
+        intent = "add"
+    ef = str(d.get("edit_field") or "").strip().lower()
+    if ef not in ("price", "stock"):
+        ef = "price"
+    try:
+        ev = max(0, round(float(d.get("edit_value") or 0)))
+    except Exception:
+        ev = 0
     out = {
+        "intent": intent,
+        "article_q": (str(d.get("article") or "")).strip().upper()[:40],
+        "edit_field": ef,
+        "edit_value": ev,
         "name": (str(d.get("name") or "")).strip()[:200],
         "category_id": 1,
         "price": 0,

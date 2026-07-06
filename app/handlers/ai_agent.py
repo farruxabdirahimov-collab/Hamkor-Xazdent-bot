@@ -23,7 +23,7 @@ from aiogram.fsm.context import FSMContext
 
 from app.runtime import router, bot
 from app.states import AgentState
-from app.database import get_user
+from app.database import get_user, db_get, db_all, db_run
 from app import agent_ai
 
 log = logging.getLogger(__name__)
@@ -131,11 +131,13 @@ async def _start_agent(msg: Message, state: FSMContext):
     await state.set_state(AgentState.active)
     await state.update_data(card=_empty_card())
     await msg.answer(
-        "🤖 *AI Agent yoqildi!*\n\n"
-        "Mahsulotni bitta xabar bilan yozing — men kartochkani tayyorlayman.\n\n"
-        "_Masalan:_ «uniglover latex qo‘lqop hamma razmerdan bor, narxi 45000 so‘m, "
-        "O‘zbekiston bo‘ylab bepul yetkazish, minimal zakaz 10 ta»\n\n"
-        "Rasm ham yuborishingiz mumkin. Bekor qilish: /cancel"
+        "🤖 *AI Agent yoqildi!* Menga oddiy tilda yozing:\n\n"
+        "➕ *Qo‘shish:* «uniglover latex qo‘lqop hamma razmerdan, 45000 so‘m, "
+        "O‘zbekiston bo‘ylab bepul, min 10 ta»\n"
+        "   _(nom aytsangiz rasmni o‘zim topaman; xohlasangiz o‘zingiz yuborasiz)_\n"
+        "📊 *So‘rov:* «nechta mahsulotim bor», «oxirgi qo‘shganlarim»\n"
+        "✏️ *Tahrir:* «XZ00123 narxini 90000 qil», «XZ00123 ombor 50»\n\n"
+        "Bekor qilish: /cancel"
     )
 
 
@@ -157,6 +159,66 @@ async def cmd_cancel(msg: Message, state: FSMContext):
     await msg.answer("❌ Agent yopildi.")
 
 
+# ── So'rov / tahrir buyruqlari (count / recent / edit) ───────────────────────
+async def _handle_command(msg: Message, intent: str, ex: dict):
+    uid = msg.from_user.id
+    shop_ids = [r["id"] for r in (await db_all("SELECT id FROM shops WHERE owner_id=?", (uid,)) or [])]
+    if not shop_ids:
+        await msg.answer("Sizda hali do‘kon/mahsulot yo‘q. Avval mahsulot qo‘shing.")
+        return
+    ids = ",".join(str(int(i)) for i in shop_ids)
+
+    if intent == "count":
+        row = await db_get(f"SELECT COUNT(*) AS c FROM products "
+                           f"WHERE shop_id IN ({ids}) AND COALESCE(is_active,1)<>2")
+        await msg.answer(f"📦 Sizda *{(row['c'] if row else 0)}* ta faol mahsulot bor.")
+        return
+
+    if intent == "recent":
+        rows = await db_all(f"SELECT name, article_code, price FROM products "
+                            f"WHERE shop_id IN ({ids}) ORDER BY id DESC LIMIT 7")
+        if not rows:
+            await msg.answer("Hali mahsulot yo‘q.")
+            return
+        lines = ["🆕 *Oxirgi qo‘shilgan mahsulotlar:*"]
+        for r in rows:
+            p = f"{int(r['price'] or 0):,}".replace(",", " ")
+            lines.append(f"• {_md(r['name'])} — {p} so‘m  `{r.get('article_code') or ''}`")
+        await msg.answer("\n".join(lines))
+        return
+
+    if intent == "edit":
+        art = (ex.get("article_q") or "").strip()
+        field = ex.get("edit_field") or "price"
+        val = int(ex.get("edit_value") or 0)
+        if not art or val <= 0:
+            await msg.answer("✏️ Tahrir uchun artikul va yangi qiymat kerak.\n"
+                             "Masalan: «XZ00123 narxini 90000 qil» yoki «XZ00123 ombor 50».")
+            return
+        artn = art.replace("-", "").replace(" ", "").upper()
+        prod = await db_get(
+            f"SELECT id, name, article_code FROM products WHERE shop_id IN ({ids}) "
+            "AND UPPER(REPLACE(REPLACE(article_code,'-',''),' ',''))=?", (artn,))
+        if not prod:
+            await msg.answer(f"😕 `{art}` artikulli mahsulot sizda topilmadi.")
+            return
+        col = "price" if field == "price" else "stock"
+        await db_run(f"UPDATE products SET {col}=? WHERE id=?", (val, prod["id"]))
+        if field == "price":
+            # narx o'zgarsa faol reklamani bekor qilamiz (bait-and-switch himoyasi — backend bilan bir xil)
+            try:
+                await db_run("UPDATE ads SET status='expired' WHERE ad_type='product' "
+                             "AND target_id=? AND status='active'", (prod["id"],))
+            except Exception:
+                pass
+        lbl = "narx" if field == "price" else "ombor soni"
+        vv = f"{val:,}".replace(",", " ")
+        await msg.answer(f"✅ *{_md(prod['name'])}*\n{lbl} yangilandi: *{vv}*"
+                         + (" so‘m" if field == "price" else " ta")
+                         + f"\n`{prod.get('article_code') or art}`")
+        return
+
+
 # ── Asosiy: agent rejimida matn (mahsulot tavsifi) ───────────────────────────
 @router.message(AgentState.active, F.text)
 async def agent_text(msg: Message, state: FSMContext):
@@ -173,6 +235,11 @@ async def agent_text(msg: Message, state: FSMContext):
         return
     if not extracted:
         await msg.answer("😕 Tushunolmadim. Mahsulot nomi va narxini yozib ko‘ring.")
+        return
+    # ── Niyat: so'rov yoki tahrir bo'lsa — alohida hal qilamiz ──
+    intent = extracted.get("intent") or "add"
+    if intent in ("count", "recent", "edit"):
+        await _handle_command(msg, intent, extracted)
         return
     # yangi ma'lumotlarni mavjud kartochka ustiga qo'yamiz (rasmlarni saqlaymiz)
     imgs = card.get("images") or []
