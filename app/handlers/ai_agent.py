@@ -46,7 +46,8 @@ _EDIT = {
 def _empty_card():
     return {"name": "", "category_id": 1, "price": 0, "unit": "dona", "sizes": [],
             "min_order": 1, "stock": 0, "free_all": False, "description": "",
-            "article": "", "images": [], "missing": []}
+            "article": "", "images": [], "missing": [],
+            "img_cands": [], "img_auto": False, "img_idx": 0}
 
 
 def _md(s):
@@ -106,7 +107,8 @@ def _card_kb(c):
          InlineKeyboardButton(text="🧾 Min. zakaz", callback_data="ag_e_min")],
         [InlineKeyboardButton(text=free_lbl, callback_data="ag_free"),
          InlineKeyboardButton(text="❌ Bekor", callback_data="ag_cancel")],
-    ])
+    ] + ([[InlineKeyboardButton(text="🔄 Boshqa rasm", callback_data="ag_nextimg")]]
+         if c.get("img_cands") else []))
 
 
 async def _show_card(msg_or_call, c, state, edit=False):
@@ -180,8 +182,29 @@ async def agent_text(msg: Message, state: FSMContext):
         if v not in (None, "", 0, [], False):
             card[k] = v
     card["images"] = imgs
+    # 🖼 Rasm avtomatik qidiruv — sotuvchi rasm yubormagan bo'lsa, nom bo'yicha topamiz
+    if not card["images"] and card["name"]:
+        w2 = await msg.answer("🖼 Mos rasm qidiryapman…")
+        try:
+            cands = await agent_ai.search_images(card["name"], n=6)
+            card["img_cands"] = cands
+            card["img_idx"] = 0
+            for u in cands:
+                b64 = await agent_ai.download_image_b64(u)
+                if b64:
+                    card["images"] = [b64]
+                    card["img_auto"] = True
+                    break
+        except Exception as e:
+            log.error(f"auto image xato: {e}")
+        try:
+            await w2.delete()
+        except Exception:
+            pass
     await state.update_data(card=card)
     await _show_card(msg, card, state)
+    if card.get("img_auto"):
+        await msg.answer("🖼 Rasm avtomatik topildi. Noto‘g‘ri bo‘lsa: «🔄 Boshqa rasm» yoki o‘zingiznikini yuboring.")
 
 
 # ── Rasm qabul qilish (agent rejimida) ───────────────────────────────────────
@@ -197,6 +220,11 @@ async def agent_photo(msg: Message, state: FSMContext):
             await msg.answer("⚠️ Rasm juda katta (max 3MB). Kichikroq yuboring.")
             return
         b64 = base64.b64encode(raw).decode()
+        # Sotuvchi o'z rasmini yubordi — avtomatik topilgan rasmni almashtiramiz
+        if card.get("img_auto"):
+            card["images"] = []
+            card["img_auto"] = False
+            card["img_cands"] = []
         card["images"] = (card.get("images") or [])
         if len(card["images"]) >= 5:
             await msg.answer("⚠️ Maksimum 5 ta rasm.")
@@ -299,6 +327,31 @@ async def ag_free(call: CallbackQuery, state: FSMContext):
 async def ag_photo_prompt(call: CallbackQuery, state: FSMContext):
     await call.message.answer("🖼 Mahsulot rasm(lar)ini shu yerga yuboring (max 5 ta).")
     await call.answer()
+
+
+@router.callback_query(F.data == "ag_nextimg")
+async def ag_nextimg(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    card = data.get("card") or _empty_card()
+    cands = card.get("img_cands") or []
+    if not cands:
+        await call.answer("Boshqa rasm yo‘q", show_alert=True); return
+    await call.answer("Qidirilyapti…")
+    n = len(cands)
+    start = int(card.get("img_idx") or 0)
+    got = None
+    for step in range(1, n + 1):
+        idx = (start + step) % n
+        b64 = await agent_ai.download_image_b64(cands[idx])
+        if b64:
+            got = (idx, b64); break
+    if not got:
+        await call.message.answer("😕 Boshqa mos rasm topilmadi."); return
+    card["img_idx"] = got[0]
+    card["images"] = [got[1]]
+    card["img_auto"] = True
+    await state.update_data(card=card)
+    await _show_card(call, card, state, edit=True)
 
 
 @router.callback_query(F.data == "ag_cancel")

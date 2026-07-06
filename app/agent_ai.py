@@ -185,6 +185,99 @@ async def extract_product(text):
     return norm, ""
 
 
+_IMG_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+           "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+
+
+async def _cse_images(query, n, key, cx):
+    """Google Custom Search (rasm) — ISHONCHLI, datacenter'dan ham ishlaydi (bepul 100/kun)."""
+    import urllib.parse
+    api = "https://www.googleapis.com/customsearch/v1?" + urllib.parse.urlencode(
+        {"key": key, "cx": cx, "q": query, "searchType": "image",
+         "num": min(n, 10), "safe": "active"})
+    async with aiohttp.ClientSession() as s:
+        async with s.get(api, timeout=aiohttp.ClientTimeout(total=20)) as r:
+            if r.status != 200:
+                log.error(f"CSE HTTP {r.status}: {(await r.text())[:200]}")
+                return []
+            data = json.loads(await r.text(errors="ignore"))
+    return [it.get("link") for it in (data.get("items") or []) if (it.get("link") or "").startswith("http")][:n]
+
+
+async def _ddg_images(query, n):
+    """DuckDuckGo (kalitsiz) — best-effort; server IP bloklansa bo'sh qaytadi (xato rasm qo'ymaymiz)."""
+    import urllib.parse
+    urls = []
+    try:
+        async with aiohttp.ClientSession(
+                headers={"User-Agent": _IMG_UA, "Accept-Language": "en-US,en;q=0.9"}) as s:
+            sp = "https://duckduckgo.com/?" + urllib.parse.urlencode(
+                {"q": query, "iax": "images", "ia": "images"})
+            async with s.get(sp, timeout=aiohttp.ClientTimeout(total=20)) as r:
+                html = await r.text(errors="ignore")
+            m = re.search(r'vqd=([\d-]+)', html) or re.search(r'vqd="([^"]+)"', html)
+            if not m:
+                return []
+            api = "https://duckduckgo.com/i.js?" + urllib.parse.urlencode(
+                {"l": "us-en", "o": "json", "q": query, "vqd": m.group(1), "f": ",,,", "p": "1"})
+            async with s.get(api, headers={"Referer": sp, "Accept": "application/json, */*",
+                                           "X-Requested-With": "XMLHttpRequest"},
+                             timeout=aiohttp.ClientTimeout(total=20)) as r:
+                if r.status != 200:
+                    return []
+                data = json.loads(await r.text(errors="ignore"))
+            for it in (data.get("results") or []):
+                u = it.get("image") or ""
+                if u.startswith("http") and u.lower().rsplit("?", 1)[0].endswith(
+                        (".jpg", ".jpeg", ".png", ".webp")):
+                    urls.append(u)
+                if len(urls) >= n:
+                    break
+    except Exception as e:
+        log.error(f"ddg_images xato: {e}")
+    return urls
+
+
+async def search_images(query, n=6):
+    """Rasm qidiruv. Avval Google CSE (kalit sozlangan bo'lsa — ishonchli),
+    aks holda DuckDuckGo (best-effort). Natija: rasm URL ro'yxati."""
+    query = (query or "").strip()
+    if not query:
+        return []
+    # dental kontekst — relevantlikni oshiradi
+    q = query if "dental" in query.lower() else (query + " dental")
+    key = ((await get_setting("google_cse_key")) or "").strip()
+    cx = ((await get_setting("google_cse_id")) or "").strip()
+    if key and cx:
+        try:
+            urls = await _cse_images(q, n, key, cx)
+            if urls:
+                return urls
+        except Exception as e:
+            log.error(f"CSE xato: {e}")
+    return await _ddg_images(q, n)
+
+
+async def download_image_b64(url):
+    """Rasmni yuklab base64 (header'siz) qaytaradi. Xato/katta bo'lsa None."""
+    import base64
+    try:
+        async with aiohttp.ClientSession(headers={"User-Agent": _IMG_UA}) as s:
+            async with s.get(url, timeout=aiohttp.ClientTimeout(total=25)) as r:
+                if r.status != 200:
+                    return None
+                ct = (r.headers.get("Content-Type") or "").lower()
+                if "image" not in ct:
+                    return None
+                raw = await r.read()
+        if len(raw) < 800 or len(raw) > 3_000_000:   # juda kichik/katta
+            return None
+        return base64.b64encode(raw).decode()
+    except Exception as e:
+        log.error(f"download_image_b64 xato: {e}")
+        return None
+
+
 async def extract_sizes_from_image(image_data_url):
     """Razmer jadvali rasmidan o'lchamlarni ajratadi. → (sizes_list, xato)."""
     provider, url, key, model = await _cfg()
