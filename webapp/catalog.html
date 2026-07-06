@@ -1083,7 +1083,7 @@ body{
       <select id="co-city" style="width:100%;box-sizing:border-box;padding:12px 14px;border:1px solid var(--border);border-radius:10px;font-size:15px;background:var(--bg,#fff);color:inherit;outline:none;margin-top:8px"><option value="">🏙 Avval viloyatni tanlang</option></select>
       <input id="co-street" type="text" placeholder="🏠 Ko'cha / mahalla *" style="width:100%;box-sizing:border-box;padding:12px 14px;border:1px solid var(--border);border-radius:10px;font-size:15px;background:var(--bg,#fff);color:inherit;outline:none;margin-top:8px">
       <div style="display:flex;gap:8px;margin-top:8px">
-        <input id="co-house" type="text" placeholder="🏘 Uy *" style="flex:1;min-width:0;box-sizing:border-box;padding:12px 14px;border:1px solid var(--border);border-radius:10px;font-size:15px;background:var(--bg,#fff);color:inherit;outline:none">
+        <input id="co-house" type="text" placeholder="🏘 Uy (ixtiyoriy)" style="flex:1;min-width:0;box-sizing:border-box;padding:12px 14px;border:1px solid var(--border);border-radius:10px;font-size:15px;background:var(--bg,#fff);color:inherit;outline:none">
         <input id="co-floor" type="text" inputmode="numeric" placeholder="Qavat" style="width:84px;box-sizing:border-box;padding:12px 10px;border:1px solid var(--border);border-radius:10px;font-size:15px;background:var(--bg,#fff);color:inherit;outline:none">
         <input id="co-apt" type="text" placeholder="Xonadon" style="width:96px;box-sizing:border-box;padding:12px 10px;border:1px solid var(--border);border-radius:10px;font-size:15px;background:var(--bg,#fff);color:inherit;outline:none">
       </div>
@@ -3122,7 +3122,7 @@ function addrLoadRegions(cur){
   fetch('/api/regions').then(function(r){return r.json();}).then(function(d){ _REGIONS=d.regions||{}; fill(); }).catch(function(){});
 }
 function openAddrForm(id){
-  var a=null; if(id){ (window._addrs||[]).forEach(function(x){ if(x.id===id) a=x; }); }
+  var a=null; if(id){ (window._addrs||[]).forEach(function(x){ if(String(x.id)===String(id)) a=x; }); }
   document.getElementById('addr-title').textContent = a?'✏️ Manzilni tahrirlash':'📍 Yangi manzil';
   document.getElementById('addr-id').value    = a?a.id:'';
   document.getElementById('addr-label').value = a?(a.label||''):'';
@@ -3952,6 +3952,7 @@ function eSelDtype(radio){
 function addEVarRow(sname, art, stk, pr){
   _editVarCount++;
   var id = _editVarCount;
+  if(pr===undefined||pr===null||pr==='') pr=(document.getElementById('e-price')||{value:''}).value||'';   // yangi variant — asosiy narx default
   var row = document.createElement('div');
   row.className = 'var-item'; row.id = 'evr-'+id;
   row.innerHTML =
@@ -4153,12 +4154,15 @@ function loadSavedAddrsForCheckout(){
       sel.appendChild(o);
     });
     if(wrap) wrap.style.display='block';
+    // Standart (yoki birinchi) manzilni AVTOMATIK to'ldiramiz — viloyat + ko'cha + telefon hammasi
+    var def=null; arr.forEach(function(a){ if(a.is_default) def=a; }); if(!def) def=arr[0];
+    if(def){ sel.value=def.id; applySavedAddr(); }
   }).catch(function(){});
 }
 function applySavedAddr(){
   var id=parseInt(document.getElementById('co-saved').value||'0',10)||0;
   if(!id) return;
-  var a=null; (window._coAddrs||[]).forEach(function(x){ if(x.id===id) a=x; });
+  var a=null; (window._coAddrs||[]).forEach(function(x){ if(String(x.id)===String(id)) a=x; });
   if(!a) return;
   if(a.phone) initPhone(document.getElementById('co-phone'), a.phone);
   if(a.region){ var rs=document.getElementById('co-region'); rs.value=a.region; if(typeof onRegionChange==='function') onRegionChange(); }
@@ -4305,7 +4309,7 @@ function confirmPay() {
     var house  = (document.getElementById('co-house').value||'').trim();
     if (!city)   { fail('🏙 Tumanni tanlang','co-city'); return; }
     if (street.length < 2) { fail('🏠 Ko\'cha / mahallani yozing','co-street'); return; }
-    if (!house)  { fail('🏘 Uy raqamini yozing','co-house'); return; }
+    // Uy raqami IXTIYORIY — ko'pincha mahalla/ko'cha maydoniga to'liq yoziladi
   }
   if (_uzNat(rphone).length > 0 && _uzNat(rphone).length !== 9) { fail('📞 Qabul qiluvchi telefoni to\'liq emas (yoki bo\'sh qoldiring)','co-rphone'); return; }
   if (!_curPay) { fail('💳 To\'lov turini tanlang','po-now'); return; }
@@ -4460,13 +4464,14 @@ function delPhoto(i) { formPhotos.splice(i,1); renderPhotoRow(); }
 
 function addVarRow() {
   var id = ++varCount;
+  var mp = (document.getElementById('f-price')||{value:''}).value||'';   // asosiy narx — default
   var row = document.createElement('div');
   row.className = 'var-item';
   row.id = 'vr-'+id;
   row.innerHTML =
     '<div style="display:flex;gap:4px;flex:1;flex-wrap:wrap">'+
       '<input class="finp" id="vs-'+id+'" placeholder="Razmer (Propilen 50sm 1ig)" style="min-width:120px;flex:2;margin-bottom:4px">'+
-      '<input class="finp" id="vp-'+id+'" placeholder="Narx (bo&#39;sh=asosiy)" type="number" style="min-width:80px;flex:1;margin-bottom:4px">'+
+      '<input class="finp" id="vp-'+id+'" placeholder="Narx (bo&#39;sh=asosiy)" type="number" value="'+mp+'" style="min-width:80px;flex:1;margin-bottom:4px">'+
       '<input class="finp" id="vq-'+id+'" placeholder="Stok" type="number" style="min-width:60px;flex:.7;margin-bottom:4px">'+
       '<input class="finp" id="va-'+id+'" placeholder="Artikul" style="min-width:70px;flex:.8;margin-bottom:4px">'+
     '</div>'+
