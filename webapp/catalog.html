@@ -2815,10 +2815,12 @@ function loadProfile(){
     var isSellerRole = isHamkor || (ROLE==='seller') || (p.role==='seller');
     var acctType=(p.role==='zubtex')?'zubtex':'clinic';
     var acctRow='<div style="display:flex;gap:6px;margin-top:8px">'+_chip(acctType==='clinic','🏥 Klinika',"switchRole('clinic')")+_chip(acctType==='zubtex','🔬 Zubtexnik',"switchRole('zubtex')")+'</div>';
-    // Rol almashtirish faqat ASOSIY ilovada (Hamkor ilovasida — yo'q)
-    var sellerEntry = isHamkor ? '' : (isSellerRole
-      ? pfRow('🛒 Xaridor rejimiga qaytish', "switchRole('clinic')")
-      : pfRow('🏪 Xazdentda soting', "switchRole('seller')"));
+    // Rol almashtirish. Hamkor ilovasida — faqat "Sotuvchi bo'lish" (hali sotuvchi bo'lmasa)
+    var sellerEntry = isHamkor
+      ? ((p.role === 'seller') ? '' : pfRow('🏪 Sotuvchi bo\'lish', "switchRole('seller')"))
+      : (isSellerRole
+          ? pfRow('🛒 Xaridor rejimiga qaytish', "switchRole('clinic')")
+          : pfRow('🏪 Xazdentda soting', "switchRole('seller')"));
     var np=getNotifPrefs();
     function _tog(on,label,fn){ return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 2px"><span style="font-size:13px">'+label+'</span><button onclick="'+fn+'" style="width:44px;height:24px;border-radius:12px;border:none;cursor:pointer;background:'+(on?'var(--green)':'var(--border)')+';position:relative;flex-shrink:0"><span style="position:absolute;top:2px;'+(on?'right:2px':'left:2px')+';width:20px;height:20px;border-radius:50%;background:#fff"></span></button></div>'; }
     el.innerHTML=
@@ -2873,7 +2875,8 @@ function loadProfile(){
           '</div>'
           : '')+
         '<div style="'+cardS+';margin-top:14px">'+
-          (isHamkor ? '' : (sellerEntry + sep + pfRow('🤝 Hamkor sotuvchi bot (ixtiyoriy)', "openSellerBot()") + sep))+
+          (isHamkor ? (sellerEntry ? (sellerEntry + sep) : '')
+                    : (sellerEntry + sep + pfRow('🤝 Hamkor sotuvchi bot (ixtiyoriy)', "openSellerBot()") + sep))+
           pfRow('🆘 Yordam / Qo\'llab-quvvatlash', "openSupport()")+
           sep+
           pfRow('📜 Maxfiylik va Shartlar', "openPrivacy()")+
