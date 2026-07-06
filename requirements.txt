@@ -3,6 +3,7 @@ aiohttp==3.9.5
 python-dotenv==1.0.1
 asyncpg
 openpyxl
+pypdf
 aiofiles
 qrcode[pil]
 # rembg/numpy — AI mahsulot-yuklash (bot.py) uchun; integratsiya bosqichida qaytariladi

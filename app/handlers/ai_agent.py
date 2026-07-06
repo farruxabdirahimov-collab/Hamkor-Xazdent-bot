@@ -136,7 +136,8 @@ async def _start_agent(msg: Message, state: FSMContext):
         "O‘zbekiston bo‘ylab bepul, min 10 ta»\n"
         "   _(nom aytsangiz rasmni o‘zim topaman; xohlasangiz o‘zingiz yuborasiz)_\n"
         "📊 *So‘rov:* «nechta mahsulotim bor», «oxirgi qo‘shganlarim»\n"
-        "✏️ *Tahrir:* «XZ00123 narxini 90000 qil», «XZ00123 ombor 50»\n\n"
+        "✏️ *Tahrir:* «XZ00123 narxini 90000 qil», «XZ00123 ombor 50»\n"
+        "📄 *Ommaviy:* Excel/PDF narxnoma yuboring — hammasini birdan yuklayman\n\n"
         "Bekor qilish: /cancel"
     )
 
@@ -303,6 +304,116 @@ async def agent_photo(msg: Message, state: FSMContext):
     except Exception as e:
         log.error(f"agent_photo xato: {e}")
         await msg.answer("⚠️ Rasmni yuklab bo‘lmadi, qayta urinib ko‘ring.")
+
+
+# ── 📄 Ommaviy import: Excel / PDF / CSV hujjat ──────────────────────────────
+async def _read_document_text(doc):
+    """Hujjatdan matn/jadval o'qiydi (xlsx/csv/pdf). → matn (str)."""
+    fname = (doc.file_name or "").lower()
+    buf = BytesIO()
+    await bot.download(doc.file_id, destination=buf)
+    data = buf.getvalue()
+    if fname.endswith((".xlsx", ".xlsm")):
+        import openpyxl
+        wb = openpyxl.load_workbook(BytesIO(data), read_only=True, data_only=True)
+        rows = []
+        for i, row in enumerate(wb.active.iter_rows(values_only=True)):
+            if i > 200:
+                break
+            cells = [str(c) for c in row if c is not None and str(c).strip()]
+            if cells:
+                rows.append(" | ".join(cells))
+        return "\n".join(rows)
+    if fname.endswith(".csv"):
+        return data.decode("utf-8", "ignore")[:12000]
+    if fname.endswith(".pdf"):
+        try:
+            from pypdf import PdfReader
+            rd = PdfReader(BytesIO(data))
+            return "\n".join((p.extract_text() or "") for p in rd.pages[:20])[:12000]
+        except Exception as e:
+            log.error(f"pdf o'qish xato: {e}")
+            return ""
+    return ""
+
+
+@router.message(AgentState.active, F.document)
+async def agent_document(msg: Message, state: FSMContext):
+    fname = (msg.document.file_name or "").lower()
+    if not fname.endswith((".xlsx", ".xlsm", ".csv", ".pdf")):
+        await msg.answer("📄 Excel (.xlsx), CSV yoki PDF narxnoma yuboring.")
+        return
+    wait = await msg.answer("📄 Faylni o‘qiyapman…")
+    try:
+        text = await _read_document_text(msg.document)
+    except Exception as e:
+        log.error(f"document read xato: {e}")
+        text = ""
+    if not text.strip():
+        try: await wait.delete()
+        except Exception: pass
+        await msg.answer("😕 Fayldan matn o‘qib bo‘lmadi (bo‘sh yoki skan-PDF bo‘lishi mumkin).")
+        return
+    res, err = await agent_ai.extract_products_bulk(text)
+    try: await wait.delete()
+    except Exception: pass
+    prods = (res or {}).get("products") or []
+    if not prods:
+        await msg.answer("😕 Faylда mahsulot topilmadi. Ustunlar: nom, narx bo‘lishi kerak.")
+        return
+    await state.update_data(bulk=prods)
+    preview = "\n".join(
+        f"• {_md(p['name'])} — {p['price']:,} so‘m".replace(",", " ") for p in prods[:10])
+    more = f"\n… va yana {len(prods) - 10} ta" if len(prods) > 10 else ""
+    await msg.answer(
+        f"📦 *{len(prods)} ta mahsulot* topildi:\n\n{preview}{more}\n\n"
+        "Rasmsiz yuklanadi — keyin har biriga rasm qo‘shsangiz bo‘ladi.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=f"✅ Hammasini yuklash ({len(prods)})", callback_data="ag_bulk_save")],
+            [InlineKeyboardButton(text="❌ Bekor", callback_data="ag_cancel")]]))
+
+
+@router.callback_query(F.data == "ag_bulk_save")
+async def ag_bulk_save(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    prods = data.get("bulk") or []
+    if not prods:
+        await call.answer("Ro‘yxat bo‘sh", show_alert=True); return
+    await call.answer("Yuklanmoqda…")
+    try: await call.message.edit_reply_markup(reply_markup=None)
+    except Exception: pass
+    uid = call.from_user.id
+    ok = fail = 0
+    prog = await call.message.answer(f"⏳ 0/{len(prods)}…")
+    async with aiohttp.ClientSession() as s:
+        for i, p in enumerate(prods, 1):
+            payload = {"user_id": uid, "name": p["name"], "price": p["price"],
+                       "category_id": p["category_id"], "categories": [p["category_id"]],
+                       "unit": p["unit"], "description": "", "stock": p.get("stock", 0),
+                       "images": [], "variants": [], "delivery_type": "local",
+                       "delivery_days": "2-3", "free_regions": "", "installment": 0}
+            try:
+                async with s.post(f"{UPSTREAM}/api/catalog/add_product", json=payload,
+                                  timeout=aiohttp.ClientTimeout(total=60)) as r:
+                    res = json.loads(await r.text())
+                if res.get("ok"):
+                    ok += 1
+                elif res.get("error") == "subscription_required":
+                    await state.update_data(bulk=None)
+                    await prog.edit_text(f"🔒 Obuna kerak. {ok} ta yuklandi, qolgani to‘xtatildi.\n"
+                                         "Obuna oling va faylni qayta yuboring.")
+                    return
+                else:
+                    fail += 1
+            except Exception as e:
+                log.error(f"bulk add xato: {e}")
+                fail += 1
+            if i % 5 == 0 or i == len(prods):
+                try: await prog.edit_text(f"⏳ {i}/{len(prods)}…")
+                except Exception: pass
+    await state.update_data(bulk=None)
+    await prog.edit_text(f"🎉 Yuklandi: *{ok}* ta" + (f", o‘tkazib yuborildi: {fail}" if fail else "") +
+                         "\nKatalog va kanalда ko‘rinadi.")
 
 
 # ── Maydonni tahrirlash: qiymat kutish ───────────────────────────────────────

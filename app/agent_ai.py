@@ -300,6 +300,56 @@ async def download_image_b64(url):
         return None
 
 
+_BULK_SYS = (
+    "Sen XazDent (stomatologiya marketpleysi) uchun narxnoma (prays-list) tahlilchisisan. "
+    "Quyidagi jadval/matndan MAHSULOTLARNI ajratib ol. FAQAT JSON qaytar:\n"
+    '{"products":[{"name":"nom","category_id":<1..10>,"price":<butun son so\'m>,'
+    '"unit":"dona|quti|to\'plam","stock":<son yoki 0>}]}\n'
+    "Kategoriya: 1 Terapevtik, 2 Jarrohlik, 3 Zubtexnik, 4 Dezinfeksiya/Himoya, 5 Uskunalar, "
+    "6 Rentgen, 7 CAD/CAM, 8 Implantlar, 9 Stom Soft, 10 Kurslar. "
+    "Narxsiz yoki nomsiz qatorlarni (sarlavha, jami, izoh) TASHLAB YUBOR. "
+    "Narxni faqat songa aylantir. Maksimum 60 ta mahsulot."
+)
+
+
+async def extract_products_bulk(text):
+    """Narxnoma matni/jadvalidan mahsulotlar ro'yxati. → (dict{'products':[...]}, xato)."""
+    provider, url, key, model = await _cfg()
+    if not key:
+        return None, "ai_not_configured"
+    content = await _chat(
+        [{"role": "system", "content": _BULK_SYS},
+         {"role": "user", "content": (text or "").strip()[:12000]}],
+        model, url, key, want_json=True, timeout=90)
+    d = _safe_json(content) or {}
+    raw = d.get("products") or []
+    out = []
+    for p in raw:
+        if not isinstance(p, dict):
+            continue
+        name = (str(p.get("name") or "")).strip()[:200]
+        try:
+            price = max(0, round(float(p.get("price") or 0)))
+        except Exception:
+            price = 0
+        if not name or price <= 0:
+            continue
+        try:
+            cid = int(p.get("category_id") or 1)
+        except Exception:
+            cid = 1
+        try:
+            stock = max(0, int(float(p.get("stock") or 0)))
+        except Exception:
+            stock = 0
+        out.append({"name": name, "category_id": cid if cid in CATEGORIES else 1,
+                    "price": price, "unit": (str(p.get("unit") or "dona")).strip()[:20] or "dona",
+                    "stock": stock})
+        if len(out) >= 60:
+            break
+    return {"products": out}, ""
+
+
 async def extract_sizes_from_image(image_data_url):
     """Razmer jadvali rasmidan o'lchamlarni ajratadi. → (sizes_list, xato)."""
     provider, url, key, model = await _cfg()
