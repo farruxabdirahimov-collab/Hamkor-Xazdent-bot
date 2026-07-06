@@ -2810,15 +2810,18 @@ function loadProfile(){
     var themeRow='<div style="display:flex;gap:6px;margin-top:8px">'+_chip(th==='system','📱 Tizim',"setTheme('system')")+_chip(th==='light','☀️ Yorug\'',"setTheme('light')")+_chip(th==='dark','🌙 Tun',"setTheme('dark')")+'</div>';
     var lg=(p.lang||'uz');
     var langRow='<div style="display:flex;gap:6px;margin-top:8px">'+_chip(lg==='uz','🇺🇿 O\'zbek',"setLang('uz')")+_chip(lg==='ru','🇷🇺 Русский',"setLang('ru')")+'</div>';
-    // Hamkor ilovasida (hostname=hamkor/seller) HAR DOIM sotuvchi rejimi — rol almashtirish yo'q
+    // SELLER ILOVA: hostname (hamkor.*) YOKI ROLE=seller (Mini App xazdent.uz'да ochilsa ham).
+    // Seller ilovada rol almashtirish / xaridor rejimi / seller-bot havolasi YO'Q.
     var isHamkor = /^(hamkor|seller)\./i.test(location.hostname);
-    var isSellerRole = isHamkor || (ROLE==='seller') || (p.role==='seller');
+    var isSellerApp = isHamkor || (ROLE==='seller');
+    var isSellerRole = isSellerApp || (p.role==='seller');
     var acctType=(p.role==='zubtex')?'zubtex':'clinic';
     var acctRow='<div style="display:flex;gap:6px;margin-top:8px">'+_chip(acctType==='clinic','🏥 Klinika',"switchRole('clinic')")+_chip(acctType==='zubtex','🔬 Zubtexnik',"switchRole('zubtex')")+'</div>';
-    // Rol almashtirish. Hamkor ilovasida — faqat "Sotuvchi bo'lish" (hali sotuvchi bo'lmasa)
-    var sellerEntry = isHamkor
+    // Seller ilovada: faqat hali sotuvchi bo'lmagan bo'lsa "Sotuvchi bo'lish"; aks holda hech narsa.
+    // Xaridor ilovada: sotuvchiga "Xaridor rejimiga qaytish", boshqaga "Xazdentda soting".
+    var sellerEntry = isSellerApp
       ? ((p.role === 'seller') ? '' : pfRow('🏪 Sotuvchi bo\'lish', "switchRole('seller')"))
-      : (isSellerRole
+      : (p.role === 'seller'
           ? pfRow('🛒 Xaridor rejimiga qaytish', "switchRole('clinic')")
           : pfRow('🏪 Xazdentda soting', "switchRole('seller')"));
     var np=getNotifPrefs();
@@ -2875,7 +2878,7 @@ function loadProfile(){
           '</div>'
           : '')+
         '<div style="'+cardS+';margin-top:14px">'+
-          (isHamkor ? (sellerEntry ? (sellerEntry + sep) : '')
+          (isSellerApp ? (sellerEntry ? (sellerEntry + sep) : '')
                     : (sellerEntry + sep + pfRow('🤝 Hamkor sotuvchi bot (ixtiyoriy)', "openSellerBot()") + sep))+
           pfRow('🆘 Yordam / Qo\'llab-quvvatlash', "openSupport()")+
           sep+
