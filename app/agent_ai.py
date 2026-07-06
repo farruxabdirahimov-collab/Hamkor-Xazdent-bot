@@ -191,6 +191,32 @@ def _normalize(d):
     return out
 
 
+async def transcribe(audio_bytes, filename="voice.ogg"):
+    """Ovozli xabarni matnga aylantiradi (Groq Whisper). → (matn, xato)."""
+    key = ((await get_setting("groq_api_key")) or "").strip()
+    if not key:
+        return "", "ai_not_configured"
+    model = ((await get_setting("groq_stt_model")) or "").strip() or "whisper-large-v3-turbo"
+    try:
+        fd = aiohttp.FormData()
+        fd.add_field("file", audio_bytes, filename=filename, content_type="audio/ogg")
+        fd.add_field("model", model)
+        fd.add_field("response_format", "json")
+        async with aiohttp.ClientSession() as s:
+            async with s.post("https://api.groq.com/openai/v1/audio/transcriptions",
+                              data=fd, headers={"Authorization": f"Bearer {key}"},
+                              timeout=aiohttp.ClientTimeout(total=60)) as r:
+                txt = await r.text()
+                if r.status != 200:
+                    log.error(f"STT HTTP {r.status}: {txt[:200]}")
+                    return "", "stt_error"
+                data = json.loads(txt)
+                return (data.get("text") or "").strip(), ""
+    except Exception as e:
+        log.error(f"transcribe xato: {e}")
+        return "", "stt_error"
+
+
 async def extract_product(text):
     """Matndan mahsulot maydonlarini ajratadi. (dict|None, xato_str)"""
     provider, url, key, model = await _cfg()

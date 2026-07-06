@@ -223,10 +223,39 @@ async def _handle_command(msg: Message, intent: str, ex: dict):
 # ── Asosiy: agent rejimida matn (mahsulot tavsifi) ───────────────────────────
 @router.message(AgentState.active, F.text)
 async def agent_text(msg: Message, state: FSMContext):
+    await _process_text(msg, state, msg.text)
+
+
+# ── Ovozli xabar → matnga → o'sha oqim ───────────────────────────────────────
+@router.message(AgentState.active, F.voice | F.audio)
+async def agent_voice(msg: Message, state: FSMContext):
+    au = msg.voice or msg.audio
+    if not au:
+        return
+    wait = await msg.answer("🎙 Ovozni tinglayapman…")
+    try:
+        buf = BytesIO()
+        await bot.download(au.file_id, destination=buf)
+        text, err = await agent_ai.transcribe(buf.getvalue())
+    except Exception as e:
+        log.error(f"agent_voice xato: {e}")
+        text, err = "", "stt_error"
+    try:
+        await wait.delete()
+    except Exception:
+        pass
+    if not text:
+        await msg.answer("😕 Ovozni tushunolmadim, qayta urinib ko‘ring yoki yozib yuboring.")
+        return
+    await msg.answer(f"🎙 _“{_md(text)}”_")
+    await _process_text(msg, state, text)
+
+
+async def _process_text(msg: Message, state: FSMContext, text: str):
     data = await state.get_data()
     card = data.get("card") or _empty_card()
     wait = await msg.answer("🧠 O‘qiyapman…")
-    extracted, err = await agent_ai.extract_product(msg.text)
+    extracted, err = await agent_ai.extract_product(text)
     try:
         await wait.delete()
     except Exception:
