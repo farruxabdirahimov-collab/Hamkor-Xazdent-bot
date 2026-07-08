@@ -1741,7 +1741,7 @@ var I18N_RU = {
   "Tasdiqlash":"Подтвердить","Davom etish":"Продолжить","Qo'shish":"Добавить",
   // Profil
   "👤 Mening ma'lumotlarim":"👤 Мои данные","📞 Asosiy raqam":"📞 Основной номер",
-  "➕ Qo'shimcha raqam":"➕ Доп. номер","🛒 Buyurtmalar":"🛒 Заказы","📋 Buyurtmalarim":"📋 Мои заказы",
+  "➕ Qo'shimcha raqam":"➕ Доп. номер","🛒 Buyurtmalar":"🛒 Заказы","📋 Buyurtmalarim":"📋 Мои заказы","🧾 Cheklarim":"🧾 Мои чеки",
   "⭐ Buyurtmalarni baholash":"⭐ Оценить заказы","⚙️ Sozlamalar":"⚙️ Настройки",
   "🌗 Mavzu":"🌗 Тема","🌐 Til":"🌐 Язык","🔔 Bildirishnomalar":"🔔 Уведомления",
   "🔗 Ulangan akkauntlar":"🔗 Привязанные аккаунты","📱 Qurilmalar / sessiyalar":"📱 Устройства / сессии",
@@ -2848,6 +2848,8 @@ function loadProfile(){
             sep+
             pfRow('📋 Buyurtmalarim', "showView('orders',document.getElementById('nb-orders'))")+
             sep+
+            pfRow('🧾 Cheklarim', "openReceipts()")+
+            sep+
             pfRow('⭐ Buyurtmalarni baholash', "showView('orders',document.getElementById('nb-orders'))")+
           '</div>')+
         '<div style="font-size:14px;font-weight:700;margin:14px 2px 8px">⚙️ Sozlamalar</div>'+
@@ -3088,6 +3090,82 @@ function enableWebPush(){
 }
 
 // ── 📍 Manzillar (bir nechta) ─────────────────────────────────────────────────
+// ── 🧾 Cheklarim (faqat yetkazilgan/yakunlangan buyurtmalar) ─────────────────
+var _receipts = [];
+function _payLabel(p){ return ({now:'💵 Karta',inst:'📅 Muddatli',cash:'🚚 Yetkazilganda',cod:'🚚 Yetkazilganda'})[p]||'🚚 Yetkazilganda'; }
+function _delLabel(m){ return ({seller_self:'🤝 Sotuvchi yetkazadi',courier:'🚗 Kuryer',office:'🏢 Manzilga yetkazish',bts_pickup:'📦 BTS punktidan',bts_express:'📦 BTS Express'})[m]||'🚚 Yetkazish'; }
+function openReceipts(){
+  document.getElementById('top-title').textContent='🧾 Cheklarim';
+  var el=document.getElementById('main'); el.innerHTML='<div class="loading"><div class="spin"></div></div>';
+  fetch('/api/my_orders?uid='+UID,{headers:_tgHeaders()}).then(function(r){return r.json();}).then(function(d){
+    var all=(d&&d.orders)||[];
+    _receipts = all.filter(function(o){ return o.status==='delivered' || o.status==='completed'; });
+    if(!_receipts.length){ el.innerHTML='<div class="empty"><div class="empty-ic">🧾</div>Hali yakunlangan chek yo\'q</div>'; return; }
+    var cardS='background:var(--surface,#fff);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px;cursor:pointer';
+    var html='<div style="padding:14px;max-width:600px;margin:0 auto">';
+    _receipts.forEach(function(o,i){
+      var cnt=(o.items||[]).length;
+      html+='<div style="'+cardS+'" onclick="openReceipt('+i+')">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center">'+
+          '<div style="font-weight:700;font-size:14px">🧾 '+esc(o.order_number)+'</div>'+
+          '<div style="font-weight:800;font-size:14px">'+fmt(o.total_amount)+' so\'m</div>'+
+        '</div>'+
+        '<div style="color:var(--hint);font-size:12px;margin-top:4px">'+esc(o.created_at)+' · '+cnt+' ta mahsulot · ✅ Yetkazildi</div>'+
+      '</div>';
+    });
+    html+='</div>'; el.innerHTML=html;
+  }).catch(function(){ document.getElementById('main').innerHTML='<div class="empty">Xato yuz berdi</div>'; });
+}
+function openReceipt(i){
+  var o=_receipts[i]; if(!o) return;
+  var el=document.getElementById('main');
+  var rows='';
+  (o.items||[]).forEach(function(it){
+    var q=it.qty||1, pr=it.price||0, sub=(it.subtotal!=null?it.subtotal:pr*q);
+    rows+='<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--border)">'+
+      '<div style="font-size:13px">'+esc(it.name||'?')+(it.variant?' <span style="color:var(--hint)">('+esc(it.variant)+')</span>':'')+
+        '<div style="color:var(--hint);font-size:11px">'+q+' x '+fmt(pr)+' so\'m</div></div>'+
+      '<div style="font-weight:700;font-size:13px;white-space:nowrap">'+fmt(sub)+'</div>'+
+    '</div>';
+  });
+  el.innerHTML='<div style="padding:14px;max-width:600px;margin:0 auto">'+
+    '<button onclick="openReceipts()" style="background:none;border:none;color:var(--primary);font-size:14px;cursor:pointer;margin-bottom:10px">← Cheklarim</button>'+
+    '<div style="background:var(--surface,#fff);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:14px">'+
+      '<div style="background:linear-gradient(135deg,#1a1a5e,#4f46e5);color:#fff;padding:16px;text-align:center">'+
+        '<div style="font-size:18px;font-weight:800">🧾 XazDent</div>'+
+        '<div style="font-size:12px;opacity:.85;margin-top:2px">Chek № '+esc(o.order_number)+'</div>'+
+        '<div style="font-size:11px;opacity:.75">'+esc(o.created_at)+'</div>'+
+      '</div>'+
+      '<div style="padding:14px">'+rows+
+        '<div style="display:flex;justify-content:space-between;padding-top:10px;font-size:15px;font-weight:800"><div>Jami</div><div>'+fmt(o.total_amount)+' so\'m</div></div>'+
+        '<div style="margin-top:12px;font-size:12px;color:var(--hint);line-height:1.9">'+
+          _delLabel(o.delivery_method)+(o.delivery_address?'<br>📍 '+esc(o.delivery_address):'')+'<br>'+
+          '💳 '+_payLabel(o.payment_type)+'<br>'+
+          '✅ Yetkazildi — XazDent orqali'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+    '<button onclick="shareReceipt('+i+')" style="width:100%;padding:12px;border:none;border-radius:12px;background:var(--primary);color:#fff;font-weight:700;cursor:pointer">📤 Ulashish</button>'+
+  '</div>';
+  document.getElementById('top-title').textContent='🧾 Chek';
+}
+function receiptText(o){
+  var lines='';
+  (o.items||[]).forEach(function(it){
+    var q=it.qty||1, pr=it.price||0, sub=(it.subtotal!=null?it.subtotal:pr*q);
+    lines+='• '+(it.name||'?')+(it.variant?' ('+it.variant+')':'')+'\n   '+q+' x '+fmt(pr)+' = '+fmt(sub)+' so\'m\n';
+  });
+  return '🧾 XazDent — CHEK\n№ '+o.order_number+'\n'+o.created_at+'\n──────────────\n'+lines+
+    '──────────────\nJami: '+fmt(o.total_amount)+' so\'m\n'+_delLabel(o.delivery_method)+'\n💳 '+_payLabel(o.payment_type)+'\n✅ Yetkazildi';
+}
+function shareReceipt(i){
+  var o=_receipts[i]; if(!o) return;
+  var t=receiptText(o);
+  try{ if(navigator.share){ navigator.share({text:t}); return; } }catch(e){}
+  try{ navigator.clipboard.writeText(t).then(function(){ _safeAlert('📋 Chek nusxa olindi'); }); return; }catch(e){}
+  _safeAlert(t);
+}
+
 function openAddresses(){
   document.getElementById('top-title').textContent='📍 Manzillarim';
   var el=document.getElementById('main'); el.innerHTML='<div class="loading"><div class="spin"></div></div>';
