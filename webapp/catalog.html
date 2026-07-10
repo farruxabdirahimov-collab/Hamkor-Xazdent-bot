@@ -1939,6 +1939,8 @@ function filterVars(q) {
   });
 }
 function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// JS single-quoted string ichida HTML atributida xavfsiz (apostrof/backslash + HTML)
+function jsq(s){ return (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function fmt(n){ return Math.round(n||0).toLocaleString(); }
 function minPrice(p){
   if(!p.variants||!p.variants.length) return fmtPrice(p.price);
@@ -2320,9 +2322,9 @@ function openDetail(pid) {
             (ok?'<div class="var-multi-stock">✅ '+v.stock+' ta</div>':'<div class="var-multi-stock" style="color:var(--red)">❌ Tugagan</div>')+
           '</div>'+
           '<div class="var-multi-ctrl">'+
-            '<button class="vmbtn" onclick="varMinus(\''+esc(v.size_name)+'\')">−</button>'+
+            '<button class="vmbtn" onclick="varMinus(\''+jsq(v.size_name)+'\')">−</button>'+
             '<span class="vmnum" id="vn-'+esc(v.size_name)+'">0</span>'+
-            '<button class="vmbtn" '+(ok?'onclick="varPlus(\''+esc(v.size_name)+'\','+v.stock+','+vPrice+')"':'disabled style="opacity:.4"')+'>+</button>'+
+            '<button class="vmbtn" '+(ok?'onclick="varPlus(\''+jsq(v.size_name)+'\','+v.stock+','+vPrice+')"':'disabled style="opacity:.4"')+'>+</button>'+
           '</div>'+
         '</div>';
       }).join('')+
