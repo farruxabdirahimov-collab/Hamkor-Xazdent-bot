@@ -3930,6 +3930,7 @@ function loadMy() {
             '<div class="mpname">'+esc(p.name)+'</div>'+
             '<div class="mpprice">'+fmtPrice(p.price)+'/'+esc(p.unit)+'</div>'+
             (p.article_code?'<div class="mpcode">📌 '+esc(p.article_code)+'</div>':'')+
+            (p.mod_status==='pending'?'<div style="font-size:11px;color:#d97706;font-weight:600;margin-top:2px">🕵️ Moderatsiyada</div>':p.mod_status==='rejected'?'<div style="font-size:11px;color:var(--red,#dc2626);font-weight:600;margin-top:2px">❌ Rad etilgan — qayta yuboring</div>':'')+
           '</div>'+
           '<div class="mpbtns">'+
             (_canProducts()?'<button class="mpbtn edit" onclick="openEdit('+p.id+')">✏️</button>':'')+
