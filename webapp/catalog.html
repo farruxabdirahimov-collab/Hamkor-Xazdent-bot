@@ -2735,8 +2735,56 @@ function openNewsLink(el) {
 }
 
 function openBannerLink(el) {
-  var url = el.getAttribute('data-url');
-  if(url) window.open(url, '_blank');
+  bannerNavigate(el.getAttribute('data-url'));
+}
+// SMART: ichki link (mahsulot/kategoriya/qidiruv) platforma ichida ochiladi,
+// faqat haqiqiy tashqi link tashqарига yo'naltiriladi.
+function bannerNavigate(url) {
+  if(!url) return;
+  var u = String(url).trim(), m;
+  if(/^\d+$/.test(u)){ _openProductById(parseInt(u,10)); return; }
+  if(/^XZ\d{3,}/i.test(u)){ _openProductByCode(u); return; }
+  m = u.match(/\/product\/(\d+)/i) || u.match(/[?&#](?:product|pid|p)=(\d+)/i);
+  if(m){ _openProductById(parseInt(m[1],10)); return; }
+  m = u.match(/[?&#](?:article|code|art)=([A-Za-z0-9\-]+)/i) || u.match(/\b(XZ\d{3,}[A-Za-z0-9]*)\b/i);
+  if(m){ _openProductByCode(m[1]); return; }
+  m = u.match(/\/category\/(\d+)/i) || u.match(/[?&#](?:cat|category)=(\d+)/i);
+  if(m){ _openCategory(m[1]); return; }
+  m = u.match(/[?&](?:q|search)=([^&#]+)/i);
+  if(m){ _openSearch(decodeURIComponent(m[1].replace(/\+/g,' '))); return; }
+  try {
+    var a = document.createElement('a'); a.href = u;
+    if(a.hostname && a.hostname === location.hostname){ window.location.href = u; return; }
+  } catch(e){}
+  if(/^https?:\/\/(t\.me|telegram\.me)\//i.test(u) && tg && tg.openTelegramLink){ try{ tg.openTelegramLink(u); return; }catch(e){} }
+  if(tg && tg.openLink){ try{ tg.openLink(u); return; }catch(e){} }
+  window.open(u, '_blank');
+}
+function _bScrollTop(){ try{ window.scrollTo(0,0); var mm=document.getElementById('main'); if(mm) mm.scrollTop=0; }catch(e){} }
+function _openProductById(pid){
+  if(!pid) return;
+  if(_prods[pid]){ openDetail(pid); return; }
+  fetch('/api/catalog/product/'+pid+'?uid='+UID).then(function(r){return r.json();}).then(function(d){
+    if(d && d.id){ _prods[pid]=d; openDetail(pid); } else _safeAlert('Mahsulot topilmadi');
+  }).catch(function(){ _safeAlert('Mahsulot ochilmadi'); });
+}
+function _openProductByCode(code){
+  fetch('/api/catalog?q='+encodeURIComponent(code)+'&uid='+UID+'&limit=1').then(function(r){return r.json();}).then(function(d){
+    var p = d && d.products && d.products[0];
+    if(p){ _prods[p.id]=p; openDetail(p.id); } else _safeAlert('Mahsulot topilmadi: '+code);
+  }).catch(function(){});
+}
+function _openCategory(c){
+  c = String(c); var btn=null;
+  document.querySelectorAll('.cat').forEach(function(b){
+    if((b.getAttribute('onclick')||'').indexOf("'"+c+"'")>=0) btn=b;
+  });
+  if(btn){ selCat(btn, c); _bScrollTop(); }
+}
+function _openSearch(q){
+  var s=document.getElementById('srch'); if(s) s.value=q;
+  if(typeof onSearch==='function') onSearch(q);
+  _bScrollTop();
 }
 
 function startBannerTimer() {
