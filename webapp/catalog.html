@@ -4245,10 +4245,16 @@ function applySavedAddr(){
   if(!id) return;
   var a=null; (window._coAddrs||[]).forEach(function(x){ if(String(x.id)===String(id)) a=x; });
   if(!a) return;
+  var val=function(id,v){ var e=document.getElementById(id); if(e) e.value=(v||''); };
   if(a.phone) initPhone(document.getElementById('co-phone'), a.phone);
   if(a.region){ var rs=document.getElementById('co-region'); rs.value=a.region; if(typeof onRegionChange==='function') onRegionChange(); }
-  // saqlangan erkin matnli manzilni ko'cha maydoniga qo'yamiz (qolganini tahrirlash mumkin)
-  if(a.address) document.getElementById('co-street').value=a.address;
+  // Tuman (co-city) — onRegionChange optionlarni to'ldirgach o'rnatamiz
+  if(a.city){ var cs=document.getElementById('co-city'); if(cs) cs.value=a.city; }
+  // Strukturaли (yangi) manzil bo'lsa har bir maydonni; bo'lmasa eski erkin matnni ko'chaga
+  val('co-street', a.street || (a.city?'':a.address) || '');
+  val('co-house',  a.house || '');
+  val('co-floor',  a.floor || '');
+  val('co-apt',    a.apartment || '');
 }
 // #6 — Yetkazish usuli (manzilga / BTS punkti)
 window._deliveryMethod='office'; window._selectedPickup=0;
@@ -4439,6 +4445,11 @@ function submitOrder(payType, instMonths) {
       order_phone:        phoneOut(document.getElementById('co-phone').value),
       delivery_region:    (document.getElementById('co-region').value||'').trim(),
       delivery_address:   _buildAddr(),
+      delivery_city:      (document.getElementById('co-city').value||'').trim(),
+      delivery_street:    (document.getElementById('co-street').value||'').trim(),
+      delivery_house:     (document.getElementById('co-house').value||'').trim(),
+      delivery_floor:     (document.getElementById('co-floor').value||'').trim(),
+      delivery_apt:       (document.getElementById('co-apt').value||'').trim(),
       delivery_recipient: (document.getElementById('co-name').value||'').trim(),
       delivery_method:    (window._deliveryMethod||'office'),
       pickup_point_id:    (window._selectedPickup||0),
