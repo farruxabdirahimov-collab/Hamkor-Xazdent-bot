@@ -2724,6 +2724,8 @@ function renderBanners(data){
       ? '<div onclick="openBannerLink(this)" data-url="'+esc(b.link_url)+'" style="width:100%;height:100%">'+img+'</div>'
       : img;
   });
+  // Haqiqiy bannerlardan keyin brend demo bannerlar ham qolsin
+  slides = slides.concat(_defaultBanners());
   _mountBanners(slides);
 }
 
