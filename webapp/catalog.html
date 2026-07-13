@@ -4160,10 +4160,10 @@ function renderCart() {
         '<div class="ci-price">'+fmtPrice(sub)+'</div>'+
       '</div>'+
       '<div class="ci-ctrl">'+
-        '<button class="ciqb" onclick="cChQty(\''+key+'\', -1)">−</button>'+
+        '<button class="ciqb" onclick="cChQty(\''+jsq(key)+'\', -1)">−</button>'+
         '<span class="ciqn">'+it.qty+'</span>'+
-        '<button class="ciqb" onclick="cChQty(\''+key+'\', 1)">+</button>'+
-        '<button class="cidel" onclick="cDel(\''+key+'\')">🗑</button>'+
+        '<button class="ciqb" onclick="cChQty(\''+jsq(key)+'\', 1)">+</button>'+
+        '<button class="cidel" onclick="cDel(\''+jsq(key)+'\')">🗑</button>'+
       '</div>'+
     '</div>';
   });
