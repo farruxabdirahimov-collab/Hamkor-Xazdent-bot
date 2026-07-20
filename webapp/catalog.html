@@ -132,6 +132,7 @@ body{
 .dflt.on.local{background:#dcfce7;border-color:#22c55e;color:#15803d;}
 .dflt.on.china{background:#fef3c7;border-color:#f59e0b;color:#b45309;}
 .dflt.on.inst {background:#ede9fe;border-color:#8b5cf6;color:#6d28d9;}
+.dflt.on.near {background:#eff6ff;border-color:#2563eb;color:#1d4ed8;}
 
 /* GRID */
 .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:14px;padding-bottom:90px;z-index:1}
@@ -853,6 +854,9 @@ html[data-theme="dark"] .ord-cd.cd-late .cd-val{color:#fca5a5}
   <!-- Sub-kategoriya qatori: asosiy kategoriya tanlanganda to'ladi (3 daraja) -->
   <div class="cats" id="subcats" style="display:none"></div>
   <div class="dfilters" id="dfilters">
+    <button class="dflt near"  id="df-region" onclick="togDf('region',this)">📍 Mening hududim</button>
+    <button class="dflt near"  id="df-fast"   onclick="togDf('fast',this)">⚡ Tez yetkazish</button>
+    <button class="dflt near"  id="df-free"   onclick="togDf('free',this)">🆓 Bepul yetkazish</button>
     <button class="dflt local" id="df-local"  onclick="togDf('local',this)">🟢 Omborda</button>
     <button class="dflt china" id="df-china"  onclick="togDf('china',this)">🌍 Global bozor</button>
     <button class="dflt inst"  id="df-inst"   onclick="togDf('inst',this)">💳 Muddatli</button>
@@ -1708,6 +1712,7 @@ function sendSupport(){
 }
 
 var cart = {}, curCat = '', curSearch = '', curView = 'home', curDelivery = '', curInst = 0;
+var curGeo = {region:0, fast:0, free:0};   // 📍 manzil filtrlari (BO'LIM 4)
 var curCurr = 'uzs';   // 'uzs' yoki 'usd'
 var usdRate = 12800;   // API dan yangilanadi
 var usdUpdated = '';
@@ -1899,6 +1904,8 @@ function deliveryBadge(p){
   if(p.fast) b+='<span class="dbadge local">⚡ '+esc(p.delivery_eta||'Tez')+'</span>';
   else if(p.delivery_type==='china') b+='<span class="dbadge china">🌍 '+esc(p.delivery_eta||((p.delivery_days||'')+' kun'))+'</span>';
   else b+='<span class="dbadge local">🟢 '+esc(p.delivery_eta||((p.delivery_days||'')+' kun'))+'</span>';
+  // 📍 Bir hududda (lekin tez emas) — yaqinlikni ko'rsatamiz
+  if(p.near && !p.fast) b+='<span class="dbadge local" style="background:rgba(37,99,235,.12);color:#2563eb">📍 Sizga yaqin</span>';
   if(p.free_delivery) b+='<span class="dbadge local" style="background:rgba(16,185,129,.15);color:#10b981">🆓 Bepul</span>';
   if(p.installment) b+='<span class="dbadge inst">💳</span>';
   return '<div class="dbadges">'+b+'</div>';
@@ -2332,6 +2339,9 @@ function loadCatalog() {
   var _durl='/api/catalog?uid='+UID+'&cat='+curCat+'&q='+encodeURIComponent(curSearch)+'&offset=0';
   if(curDelivery) _durl+='&delivery='+curDelivery;
   if(curInst) _durl+='&installment=1';
+  if(curGeo.region) _durl+='&region_only=1';   // 📍 faqat mening hududim
+  if(curGeo.fast)   _durl+='&fast=1';           // ⚡ tez yetkazish
+  if(curGeo.free)   _durl+='&free=1';           // 🆓 bepul yetkazish
   // Oldingi (eskirgan) so'rovni bekor qilamiz — kech kelgan javob ekranni buzmasin
   if(_catCtl){ try{ _catCtl.abort(); }catch(e){} }
   _catCtl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
@@ -2343,6 +2353,15 @@ function loadCatalog() {
       prods.forEach(function(p){ _prods[p.id] = p; });
       _catHasMore = !!d.has_more;
       _catOffset = (d.next_offset != null) ? d.next_offset : prods.length;
+      // 📍 Manzil filtri so'ralgan, lekin xaridor hududi yo'q
+      if (d.region_missing) {
+        document.getElementById('main').innerHTML =
+          '<div class="empty"><div class="empty-ic">📍</div>Bu filtr uchun hududingizni kiriting'+
+          '<br><small style="color:var(--hint)">Profil → Manzillar bo\'limidan hududni tanlang</small>'+
+          '<br><button onclick="curGeo={region:0,fast:0,free:0};document.querySelectorAll(\'#df-region,#df-fast,#df-free\').forEach(function(b){b.classList.remove(\'on\')});loadCatalog();" '+
+          'style="margin-top:12px;padding:9px 16px;border:none;border-radius:9px;background:var(--primary);color:#fff;font-weight:700;cursor:pointer">Filtrni tozalash</button></div>';
+        return;
+      }
       if (!prods.length) {
         document.getElementById('main').innerHTML = '<div class="empty"><div class="empty-ic">🔍</div>Mahsulot topilmadi</div>';
         return;
@@ -2374,6 +2393,9 @@ function loadMoreCatalog(){
   var _durl='/api/catalog?uid='+UID+'&cat='+curCat+'&q='+encodeURIComponent(curSearch)+'&offset='+_catOffset;
   if(curDelivery) _durl+='&delivery='+curDelivery;
   if(curInst) _durl+='&installment=1';
+  if(curGeo.region) _durl+='&region_only=1';
+  if(curGeo.fast)   _durl+='&fast=1';
+  if(curGeo.free)   _durl+='&free=1';
   fetch(_durl).then(function(r){return r.json();}).then(function(d){
     var prods = d.products || [];
     prods.forEach(function(p){ _prods[p.id] = p; });
@@ -2524,6 +2546,10 @@ function togDf(type, btn) {
   } else if(type === 'inst'){
     curInst = curInst ? 0 : 1;
     btn.classList.toggle('on', curInst === 1);
+  } else if(type === 'region' || type === 'fast' || type === 'free'){
+    // 📍 Manzil filtrlari — xaridor hududini talab qiladi
+    curGeo[type] = curGeo[type] ? 0 : 1;
+    btn.classList.toggle('on', curGeo[type] === 1);
   }
   loadCatalog();
 }
