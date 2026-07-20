@@ -1583,14 +1583,17 @@ function onTelegramAuth(user){
 // Token enforcement: BARCHA /api/ so'rovlariga X-Tg-Init headeri avtomatik qo'shiladi.
 // Server uid'ni initData'dan tasdiqlaydi → hech kim birovning ID si bilan kira olmaydi.
 (function(){
-  if(!(tg && tg.initData)) return;
   var _f = window.fetch.bind(window);
   window.fetch = function(input, init){
     try{
       var url = (typeof input==='string') ? input : (input && input.url) || '';
       if(url.indexOf('/api/') >= 0){
         init = init || {};
-        init.headers = Object.assign({}, init.headers || {}, {'X-Tg-Init': tg.initData});
+        var h = Object.assign({}, init.headers || {});
+        if(tg && tg.initData) h['X-Tg-Init'] = tg.initData;
+        var wt = ''; try{ wt = localStorage.getItem('xz_wtok') || ''; }catch(e){}
+        if(wt && !h['X-Web-Token']) h['X-Web-Token'] = wt;
+        init.headers = h;
       }
     }catch(e){}
     return _f(input, init);
