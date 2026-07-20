@@ -701,6 +701,20 @@ body{
 .ord-item-qty{font-size:11px;color:var(--hint)}
 .ord-item-art{font-size:10px;color:var(--hint);
   background:var(--bg);padding:1px 5px;border-radius:4px}
+/* ⏳ Yetkazish muddati countdown */
+.ord-cd{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  margin:0 14px 10px;padding:7px 10px;border-radius:9px;
+  background:#eff6ff;border:1px solid #bfdbfe}
+.ord-cd .cd-val{font-size:12px;font-weight:700;color:#1d4ed8;
+  font-variant-numeric:tabular-nums}
+.ord-cd .cd-eta{font-size:10px;color:var(--hint);white-space:nowrap}
+.ord-cd.cd-bare{margin:8px 0 0}
+html[data-theme="dark"] .ord-cd{background:rgba(37,99,235,.14);border-color:rgba(37,99,235,.35)}
+html[data-theme="dark"] .ord-cd .cd-val{color:#93c5fd}
+html[data-theme="dark"] .ord-cd.cd-late{background:rgba(239,68,68,.14);border-color:rgba(239,68,68,.35)}
+html[data-theme="dark"] .ord-cd.cd-late .cd-val{color:#fca5a5}
+.ord-cd.cd-late{background:#fef2f2;border-color:#fecaca}
+.ord-cd.cd-late .cd-val{color:#b91c1c}
 .ord-ftr{display:flex;align-items:center;justify-content:space-between;
   padding:10px 14px;background:var(--bg)}
 .ord-total{font-size:14px;font-weight:700;color:var(--text)}
@@ -1580,8 +1594,9 @@ function onTelegramAuth(user){
       } else { alert('Kirishda xato. Qayta urinib ko\'ring.'); }
     }).catch(function(){ alert('Tarmoq xatosi.'); });
 }
-// Token enforcement: BARCHA /api/ so'rovlariga X-Tg-Init headeri avtomatik qo'shiladi.
-// Server uid'ni initData'dan tasdiqlaydi → hech kim birovning ID si bilan kira olmaydi.
+// Token enforcement: BARCHA /api/ so'rovlariga avtomatik tasdiqlangan token
+// qo'shiladi — Mini App'da X-Tg-Init, brauzerda X-Web-Token. Server uid'ni
+// shu tokenlardan tasdiqlaydi → hech kim ?uid= bilan birovning ID'sida kira olmaydi.
 (function(){
   var _f = window.fetch.bind(window);
   window.fetch = function(input, init){
@@ -1861,6 +1876,7 @@ document.querySelectorAll('.cat-chk').forEach(function(lbl) {
     // Hamkor ish muhiti — sotuvchi darhol o'z mahsulotlariga tushadi
     showView('my', document.getElementById('nb-my'));
   } else {
+    // Xaridor — BOSH SAHIFA (banner + kategoriya + mashhur mahsulotlar)
     showView('home', document.getElementById('nb-home'));
   }
 })();
@@ -2778,24 +2794,31 @@ function openBannerLink(el) {
   bannerNavigate(el.getAttribute('data-url'));
 }
 // SMART: ichki link (mahsulot/kategoriya/qidiruv) platforma ichida ochiladi,
-// faqat haqiqiy tashqi link tashqарига yo'naltiriladi.
+// faqat haqiqiy tashqi link tashqarига yo'naltiriladi.
 function bannerNavigate(url) {
   if(!url) return;
   var u = String(url).trim(), m;
+  // faqat raqam = mahsulot id;  XZ... = artikul
   if(/^\d+$/.test(u)){ _openProductById(parseInt(u,10)); return; }
   if(/^XZ\d{3,}/i.test(u)){ _openProductByCode(u); return; }
+  // mahsulot (id): /product/123, ?product=123, ?p=123, #p=123
   m = u.match(/\/product\/(\d+)/i) || u.match(/[?&#](?:product|pid|p)=(\d+)/i);
   if(m){ _openProductById(parseInt(m[1],10)); return; }
+  // mahsulot (artikul): ?article=... yoki matnда XZ00123
   m = u.match(/[?&#](?:article|code|art)=([A-Za-z0-9\-]+)/i) || u.match(/\b(XZ\d{3,}[A-Za-z0-9]*)\b/i);
   if(m){ _openProductByCode(m[1]); return; }
+  // kategoriya: /category/5, ?cat=5
   m = u.match(/\/category\/(\d+)/i) || u.match(/[?&#](?:cat|category)=(\d+)/i);
   if(m){ _openCategory(m[1]); return; }
+  // qidiruv: ?q=... ?search=...
   m = u.match(/[?&](?:q|search)=([^&#]+)/i);
   if(m){ _openSearch(decodeURIComponent(m[1].replace(/\+/g,' '))); return; }
+  // same-origin ichki link — platformada qolamiz
   try {
     var a = document.createElement('a'); a.href = u;
     if(a.hostname && a.hostname === location.hostname){ window.location.href = u; return; }
   } catch(e){}
+  // tashqi link (Telegram-xavfsiz)
   if(/^https?:\/\/(t\.me|telegram\.me)\//i.test(u) && tg && tg.openTelegramLink){ try{ tg.openTelegramLink(u); return; }catch(e){} }
   if(tg && tg.openLink){ try{ tg.openLink(u); return; }catch(e){} }
   window.open(u, '_blank');
@@ -3389,6 +3412,7 @@ function loadSellerOrders(){
         '<div style="display:flex;justify-content:space-between;align-items:center"><b>#'+o.id+'</b><span style="font-size:12px;color:var(--hint)">'+(SL[o.status]||esc(o.status))+'</span></div>'+
         '<div style="font-size:13px;margin-top:6px">'+items+'</div>'+
         '<div style="font-size:14px;font-weight:700;margin-top:4px">'+fmtPrice(o.total)+'</div>'+
+        cdHtml(o,true)+
         (o.delivery_address?'<div style="font-size:12px;color:var(--hint);margin-top:4px">📍 '+esc(o.delivery_address)+'</div>':'')+
         '<div style="font-size:11px;color:var(--hint);margin-top:2px">🔒 Mijoz ma\'lumotlari maxfiy — yetkazishni XazDent muvofiqlashtiradi</div>'+
         (o.status==='pending'?'<div style="display:flex;gap:6px;margin-top:8px"><button onclick="sellerOrderAct('+o.id+',\'confirm\')" style="flex:1;padding:9px;border:none;border-radius:8px;background:var(--green,#10b981);color:#fff;font-weight:700;cursor:pointer">✅ Qabul qilish</button><button onclick="sellerOrderAct('+o.id+',\'reject\')" style="border:1px solid var(--red);background:none;color:var(--red);border-radius:8px;padding:9px 12px;cursor:pointer">❌ Rad</button></div>':'')+
@@ -4655,7 +4679,7 @@ function addVarRow() {
       '<input class="finp" id="vs-'+id+'" placeholder="Razmer (Propilen 50sm 1ig)" style="min-width:120px;flex:2;margin-bottom:4px">'+
       '<input class="finp" id="vp-'+id+'" placeholder="Narx (bo&#39;sh=asosiy)" type="number" value="'+mp+'" style="min-width:80px;flex:1;margin-bottom:4px">'+
       '<input class="finp" id="vq-'+id+'" placeholder="Stok" type="number" style="min-width:60px;flex:.7;margin-bottom:4px">'+
-      '<input class="finp" id="va-'+id+'" placeholder="Artikul" style="min-width:70px;flex:.8;margin-bottom:4px">'+
+      '<input class="finp" id="va-'+id+'" placeholder="Artikul (ixtiyoriy)" style="min-width:70px;flex:.8;margin-bottom:4px">'+
     '</div>'+
     '<button class="var-del" onclick="this.parentNode.remove()">✕</button>';
   document.getElementById('var-editor').appendChild(row);
@@ -4772,6 +4796,46 @@ var STATUS_LABELS = {
   cancelled: {text: "❌ Bekor",         cls: "s-cancelled"},
 };
 
+// ── ⏳ Yetkazish muddati (jonli countdown) ───────────────────────────────────
+// secs_left server soatida hisoblanadi; sahifada faqat o'tgan vaqt qo'shiladi,
+// shuning uchun qurilma soati noto'g'ri bo'lsa ham hisob to'g'ri ketadi.
+function _cd2(n){ return (n<10?'0':'')+n; }
+function cdFmt(s){
+  s = Math.abs(Math.floor(s));
+  var d = Math.floor(s/86400), h = Math.floor((s%86400)/3600),
+      m = Math.floor((s%3600)/60), x = s%60;
+  if (d > 0) return d+' kun '+h+' soat';
+  if (h > 0) return h+':'+_cd2(m)+':'+_cd2(x);
+  return m+':'+_cd2(x);
+}
+function cdText(secs){
+  return secs < 0 ? ('⏰ Kechikdi — ' + cdFmt(secs) + ' oldin')
+                  : ('⏳ Yetkazishgacha: ' + cdFmt(secs));
+}
+// Buyurtma kartasi uchun countdown bloki (countdown bo'lmasa bo'sh satr).
+// bare=true — o'z paddingi bor kartalar uchun (chekka margin'siz).
+function cdHtml(o, bare){
+  if (!o || !o.countdown || o.secs_left === null || o.secs_left === undefined) return '';
+  var eta = o.eta_text ? ('<span class="cd-eta">' + esc(o.eta_text) + '</span>') : '';
+  return '<div class="ord-cd' + (o.late ? ' cd-late' : '') + (bare ? ' cd-bare' : '') + '" ' +
+           'data-left="' + o.secs_left + '" data-t0="' + Date.now() + '">' +
+           '<span class="cd-val">' + cdText(o.secs_left) + '</span>' + eta +
+         '</div>';
+}
+function _cdTick(){
+  var els = document.querySelectorAll('.ord-cd');
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i];
+    var base = parseInt(el.getAttribute('data-left') || '0', 10);
+    var t0   = parseInt(el.getAttribute('data-t0') || '0', 10);
+    var secs = base - Math.floor((Date.now() - t0) / 1000);
+    var v = el.querySelector('.cd-val');
+    if (v) v.textContent = cdText(secs);
+    if (secs < 0) el.classList.add('cd-late'); else el.classList.remove('cd-late');
+  }
+}
+setInterval(_cdTick, 1000);
+
 function loadOrders() {
   var el = document.getElementById('main');
   el.innerHTML = '<div class="loading"><div class="spin"></div></div>';
@@ -4836,6 +4900,7 @@ function loadOrders() {
               '<span class="ord-status ' + st.cls + '">' + st.text + '</span>' +
             '</div>' +
             '<div class="ord-items">' + itemsHtml + '</div>' +
+            cdHtml(o) +
             '<div class="ord-ftr">' +
               '<div class="ord-total">' + fmt(o.total_amount) + ' so\'m</div>' +
               reviewHtml +
