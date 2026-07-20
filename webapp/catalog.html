@@ -3048,7 +3048,7 @@ function saveProfEdit(){
 function favBtn(p){
   if(ROLE==='seller') return '';
   var on=window._favs&&window._favs.has(p.id);
-  return '<button class="fav-ic'+(on?' on':'')+'" onclick="event.stopPropagation();toggleFav('+p.id+',this)">'+(on?'❤️':'🤍')+'</button>';
+  return '<button class="fav-ic'+(on?' on':'')+'" onclick="event.stopPropagation();toggleFav('+p.id+',this)">'+(on?'💙':'🤍')+'</button>';
 }
 function loadFavIds(){
   if(!UID) return;
@@ -3061,7 +3061,7 @@ function toggleFav(pid, btn){
     .then(function(r){return r.json();}).then(function(d){
       if(!d||!d.ok) return;
       if(!window._favs) window._favs=new Set();
-      if(d.favorited){ window._favs.add(pid); if(btn){btn.classList.add('on');btn.textContent='❤️';} }
+      if(d.favorited){ window._favs.add(pid); if(btn){btn.classList.add('on');btn.textContent='💙';} }
       else { window._favs.delete(pid); if(btn){btn.classList.remove('on');btn.textContent='🤍';} }
     }).catch(function(){});
 }
