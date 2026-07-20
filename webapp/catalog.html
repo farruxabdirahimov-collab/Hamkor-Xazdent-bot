@@ -52,7 +52,7 @@ html[data-theme="dark"]{
 }
 html[data-theme="dark"] .nav{ background:rgba(23,26,33,.92); }
 html[data-theme="dark"] img{ filter:brightness(.95); }
-/* ❤️ Sevimli yurakcha (mahsulot rasmi ustida) */
+/* 💙 Sevimli yurakcha (mahsulot rasmi ustida) */
 .fav-ic{position:absolute;top:8px;left:8px;width:32px;height:32px;border:none;border-radius:50%;
   background:rgba(255,255,255,.85);backdrop-filter:blur(4px);font-size:16px;line-height:1;
   cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:3;box-shadow:0 2px 6px rgba(0,0,0,.15)}
@@ -430,7 +430,7 @@ body{
 .nb-badge{
   position:absolute;top:-4px;right:-8px;
   min-width:16px;height:16px;
-  background:var(--red,#ef4444);color:#fff;
+  background:var(--primary,#2563eb);color:#fff;
   border-radius:8px;font-size:9px;font-weight:700;
   display:none;align-items:center;justify-content:center;
   padding:0 4px;line-height:1;
@@ -1760,7 +1760,7 @@ var I18N_RU = {
   // Nav + sarlavhalar
   "📦 Mahsulotlarim":"📦 Мои товары","👤 Profil":"👤 Профиль","📊 Statistika":"📊 Статистика",
   "🎁 Aksiyalar":"🎁 Акции","🆕 Yangiliklar":"🆕 Новости","📋 Buyurtmalar":"📋 Заказы",
-  "❤️ Sevimlilar":"❤️ Избранное","📍 Manzillarim":"📍 Мои адреса","🛍 XazDent Market":"🛍 XazDent Market",
+  "💙 Sevimlilar":"💙 Избранное","📍 Manzillarim":"📍 Мои адреса","🛍 XazDent Market":"🛍 XazDent Market",
   "Katalog":"Каталог","Aksiya":"Акции","Buyurtma":"Заказы","Yangilik":"Новости","Savat":"Корзина",
   "Mening":"Мои","Profil":"Профиль","Statistika":"Статистика","Rasm qo'sh":"Добавить фото",
   // Tugmalar / umumiy
@@ -3213,7 +3213,7 @@ function loadProfile(){
         (isSellerRole ? '' :
           '<div style="font-size:14px;font-weight:700;margin:14px 2px 8px">🛒 Buyurtmalar</div>'+
           '<div style="'+cardS+'">'+
-            pfRow('❤️ Sevimlilar', "loadFavorites()")+
+            pfRow('💙 Sevimlilar', "loadFavorites()")+
             sep+
             pfRow('📋 Buyurtmalarim', "showView('orders',document.getElementById('nb-orders'))")+
             sep+
@@ -3358,7 +3358,7 @@ function saveProfEdit(){
     }).catch(function(){ btn.disabled=false; btn.textContent='💾 Saqlash'; alert('Tarmoq xatosi'); });
 }
 
-// ── ❤️ Sevimlilar ────────────────────────────────────────────────────────────
+// ── 💙 Sevimlilar ────────────────────────────────────────────────────────────
 function favBtn(p){
   if(ROLE==='seller') return '';
   var on=window._favs&&window._favs.has(p.id);
@@ -3380,11 +3380,11 @@ function toggleFav(pid, btn){
     }).catch(function(){});
 }
 function loadFavorites(){
-  document.getElementById('top-title').textContent='❤️ Sevimlilar';
+  document.getElementById('top-title').textContent='💙 Sevimlilar';
   var el=document.getElementById('main'); el.innerHTML='<div class="loading"><div class="spin"></div></div>';
   fetch('/api/favorites?uid='+UID,{headers:_tgHeaders()}).then(function(r){return r.json();}).then(function(d){
     var prods=(d&&d.products)||[];
-    if(!prods.length){ el.innerHTML='<div class="empty"><div class="empty-ic">❤️</div>Sevimlilar bo\'sh.<br>Mahsulot ustidagi 🤍 belgisini bosing.</div>'; return; }
+    if(!prods.length){ el.innerHTML='<div class="empty"><div class="empty-ic">💙</div>Sevimlilar bo\'sh.<br>Mahsulot ustidagi 🤍 belgisini bosing.</div>'; return; }
     window._favs=new Set(prods.map(function(p){return p.id;}));
     var html='<div class="grid">';
     prods.forEach(function(p){
