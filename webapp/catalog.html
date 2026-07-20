@@ -849,17 +849,9 @@ html[data-theme="dark"] .ord-cd.cd-late .cd-val{color:#fca5a5}
 <div class="cats-wrap">
   <div class="cats" id="cats">
     <button class="cat on" onclick="selCat(this,'')">Hammasi</button>
-    <button class="cat" onclick="selCat(this,'1')">🦷 Terapevtik</button>
-    <button class="cat" onclick="selCat(this,'2')">⚙️ Jarrohlik</button>
-    <button class="cat" onclick="selCat(this,'3')">🔬 Zubtexnik</button>
-    <button class="cat" onclick="selCat(this,'4')">🧪 Dezinfeksiya</button>
-    <button class="cat" onclick="selCat(this,'5')">💡 Uskunalar</button>
-    <button class="cat" onclick="selCat(this,'6')">📸 Rentgen</button>
-    <button class="cat" onclick="selCat(this,'7')">🖥 CAD/CAM</button>
-    <button class="cat" onclick="selCat(this,'8')">🦴 Implantlar</button>
-    <button class="cat" onclick="selCat(this,'9')">💻 Stom Soft</button>
-    <button class="cat" onclick="selCat(this,'10')">🎓 Kurslar</button>
   </div>
+  <!-- Sub-kategoriya qatori: asosiy kategoriya tanlanganda to'ladi (3 daraja) -->
+  <div class="cats" id="subcats" style="display:none"></div>
   <div class="dfilters" id="dfilters">
     <button class="dflt local" id="df-local"  onclick="togDf('local',this)">🟢 Omborda</button>
     <button class="dflt china" id="df-china"  onclick="togDf('china',this)">🌍 Global bozor</button>
@@ -872,6 +864,7 @@ html[data-theme="dark"] .ord-cd.cd-late .cd-val{color:#fca5a5}
   <div class="banner-track" id="banner-track"></div>
   <div class="banner-dots" id="banner-dots"></div>
 </div>
+<div id="cat-warn" style="display:none;margin:10px 14px;padding:11px 13px;border-radius:12px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:13px"></div>
 <div id="main"></div>
 <button class="fab" id="fab" onclick="openForm()">+</button>
 
@@ -996,6 +989,17 @@ html[data-theme="dark"] .ord-cd.cd-late .cd-val{color:#fca5a5}
 
     <div class="flabel">Tavsif</div>
     <textarea class="finp" id="e-desc" rows="2" placeholder="Mahsulot haqida..."></textarea>
+
+    <div class="flabel">🗂 Kategoriya *</div>
+    <select class="finp" id="e-cat1" onchange="eCatCascade(1)" style="width:100%;margin-bottom:8px;color:#1a1a3e;background:#fff">
+      <option value="">Asosiy yo'nalishni tanlang</option>
+    </select>
+    <select class="finp" id="e-cat2" onchange="eCatCascade(2)" style="width:100%;margin-bottom:8px;display:none;color:#1a1a3e;background:#fff">
+      <option value="">Bo'limni tanlang</option>
+    </select>
+    <select class="finp" id="e-cat3" style="width:100%;margin-bottom:12px;display:none;color:#1a1a3e;background:#fff">
+      <option value="">Aniq turini tanlang</option>
+    </select>
 
     <div class="flabel">📦 Mavjudlik</div>
     <div style="display:flex;gap:8px;margin-bottom:12px">
@@ -1181,17 +1185,20 @@ html[data-theme="dark"] .ord-cd.cd-late .cd-val{color:#fca5a5}
     <input class="finp" id="f-name" placeholder="Masalan: Dentium Implant">
 
     <div class="flabel">Yo'nalish (bir yoki bir nechta) *</div>
-    <div class="cat-grid" id="cat-grid">
-      <label class="cat-chk"><input type="checkbox" value="1"><span>🦷 Terapevtik</span></label>
-      <label class="cat-chk"><input type="checkbox" value="2"><span>⚙️ Jarrohlik</span></label>
-      <label class="cat-chk"><input type="checkbox" value="3"><span>🔬 Zubtexnik</span></label>
-      <label class="cat-chk"><input type="checkbox" value="4"><span>🧪 Dezinfeksiya</span></label>
-      <label class="cat-chk"><input type="checkbox" value="5"><span>💡 Uskunalar</span></label>
-      <label class="cat-chk"><input type="checkbox" value="6"><span>📸 Rentgen</span></label>
-      <label class="cat-chk"><input type="checkbox" value="7"><span>🖥 CAD/CAM</span></label>
-      <label class="cat-chk"><input type="checkbox" value="8"><span>🦴 Implantlar</span></label>
-      <label class="cat-chk"><input type="checkbox" value="9"><span>💻 Stom Soft</span></label>
-      <label class="cat-chk"><input type="checkbox" value="10"><span>🎓 Kurslar</span></label>
+    <div class="cat-grid" id="cat-grid" style="display:block">
+      <select class="finp" id="f-cat1" onchange="catCascade(1)" style="width:100%;margin-bottom:8px;color:#1a1a3e;background:#fff">
+        <option value="">Asosiy yo'nalishni tanlang *</option>
+      </select>
+      <select class="finp" id="f-cat2" onchange="catCascade(2)" style="width:100%;margin-bottom:8px;display:none;color:#1a1a3e;background:#fff">
+        <option value="">Bo'limni tanlang</option>
+      </select>
+      <select class="finp" id="f-cat3" style="width:100%;display:none;color:#1a1a3e;background:#fff">
+        <option value="">Aniq turini tanlang</option>
+      </select>
+      <div style="font-size:11px;color:var(--hint);margin-top:4px">
+        Iloji boricha <b>eng aniq</b> (oxirgi) darajani tanlang &mdash; mahsulotingiz
+        xaridorga tezroq topiladi.
+      </div>
     </div>
 
     <div class="flabel">Narx va birlik *</div>
@@ -1834,6 +1841,12 @@ document.querySelectorAll('.cat-chk').forEach(function(lbl) {
 
 (function init() {
   try{ if(_i18nLang()==='ru') startI18n(); }catch(e){}
+  // 🗂 Kategoriya daraxtini yuklaymiz (chip'lar, plitkalar, kaskad shundan)
+  try{
+    loadCatTree(function(){
+      if(ROLE==='seller'){ try{ checkNeedsCategory(); }catch(e){} }
+    });
+  }catch(e){}
   if (ROLE !== 'seller') { restoreCart(); loadFavIds(); }   // savat + sevimlilarni tiklash
   else _cartRestored = true;
   // Brauzer (Telegram emas) + kirilmagan bo'lsa — "Kirish" tugmasini ko'rsatamiz
@@ -2070,15 +2083,221 @@ function _moreBtnHtml(){
     '<button class="abtn" style="max-width:220px;margin:0 auto" onclick="loadMoreCatalog()">Ko\'proq yuklash ↓</button></div>';
 }
 
+// ── 🗂 Tahrirlash formasi uchun kaskad (e-cat1/2/3) ─────────────────────────
+function eCatCascadeInit(preselectId){
+  loadCatTree(function(){
+    var s1=document.getElementById('e-cat1'); if(!s1) return;
+    s1.innerHTML='<option value="">Asosiy yo\'nalishni tanlang</option>'+
+      CAT_TREE.map(function(c){
+        return '<option value="'+c.id+'">'+esc(((c.icon?c.icon+' ':'')+c.name))+'</option>';
+      }).join('');
+    eCatCascadeSet(preselectId||0);
+  });
+}
+function eCatCascadeSet(catId){
+  var s1=document.getElementById('e-cat1'), s2=document.getElementById('e-cat2'),
+      s3=document.getElementById('e-cat3');
+  if(!s1) return;
+  s1.value=''; if(s2){s2.value='';s2.style.display='none';}
+  if(s3){s3.value='';s3.style.display='none';}
+  var node=catId?catFindNode(catId):null;
+  if(!node) return;
+  var path=[], cur=node;
+  while(cur){ path.unshift(cur); cur=cur.parent_id?catFindNode(cur.parent_id):null; }
+  if(path[0]){ s1.value=path[0].id; eCatCascade(1); }
+  if(path[1]&&s2){ s2.value=path[1].id; eCatCascade(2); }
+  if(path[2]&&s3){ s3.value=path[2].id; }
+}
+function eCatCascade(level){
+  var s2=document.getElementById('e-cat2'), s3=document.getElementById('e-cat3');
+  function fill(sel,kids,ph){
+    if(!sel) return;
+    if(!kids.length){ sel.style.display='none'; sel.innerHTML='<option value=""></option>'; return; }
+    sel.style.display='';
+    sel.innerHTML='<option value="">'+ph+'</option>'+kids.map(function(k){
+      return '<option value="'+k.id+'">'+esc(((k.icon?k.icon+' ':'')+k.name))+'</option>';
+    }).join('');
+  }
+  if(level===1){
+    var v1=document.getElementById('e-cat1').value;
+    var n1=v1?catFindNode(v1):null;
+    fill(s2,(n1&&n1.children)||[],'Bo\'limni tanlang');
+    fill(s3,[],'');
+  } else if(level===2){
+    var v2=s2?s2.value:'';
+    var n2=v2?catFindNode(v2):null;
+    fill(s3,(n2&&n2.children)||[],'Aniq turini tanlang');
+  }
+}
+function eCatValue(){
+  var ids=['e-cat3','e-cat2','e-cat1'];
+  for(var i=0;i<ids.length;i++){
+    var el=document.getElementById(ids[i]);
+    if(el&&el.value) return parseInt(el.value,10);
+  }
+  return 0;
+}
+
+// ── 🗂 KATEGORIYA DARAXTI (3 daraja, /api/categories dan) ────────────────────
+// Hech qanday hardcode ro'yxat yo'q: chip'lar, bosh sahifa plitkalari va
+// sotuvchi formasidagi kaskad — hammasi shu daraxtdan quriladi.
+var CAT_TREE = [];
+var CAT_FLAT = {};
+var _catTreeLoaded = false;
+
+function loadCatTree(cb){
+  if(_catTreeLoaded){ if(cb) cb(); return; }
+  fetch('/api/categories').then(function(r){return r.json();}).then(function(d){
+    CAT_TREE=(d&&d.tree)||[]; CAT_FLAT=(d&&d.flat)||{};
+    _catTreeLoaded=true;
+    renderCatChips();
+    if(cb) cb();
+  }).catch(function(){ if(cb) cb(); });
+}
+function catFindNode(id,nodes){
+  nodes=nodes||CAT_TREE; id=parseInt(id,10);
+  for(var i=0;i<nodes.length;i++){
+    if(nodes[i].id===id) return nodes[i];
+    var f=catFindNode(id,nodes[i].children||[]);
+    if(f) return f;
+  }
+  return null;
+}
+// Asosiy (level-1) chip'lar
+function renderCatChips(){
+  var box=document.getElementById('cats'); if(!box) return;
+  var html='<button class="cat'+(curCat?'':' on')+'" onclick="selCat(this,\'\')">Hammasi</button>';
+  CAT_TREE.forEach(function(c){
+    var on=(String(curCat)===String(c.id))?' on':'';
+    html+='<button class="cat'+on+'" onclick="selCat(this,\''+c.id+'\')">'+
+          esc(((c.icon?c.icon+' ':'')+c.name))+'</button>';
+  });
+  box.innerHTML=html;
+}
+// Tanlangan kategoriyaning bolalari — ikkinchi qator chip
+function renderSubChips(catId){
+  var box=document.getElementById('subcats'); if(!box) return;
+  var node=catId?catFindNode(catId):null;
+  var kids=(node&&node.children)||[];
+  if(!kids.length){ box.style.display='none'; box.innerHTML=''; return; }
+  box.style.display='';
+  box.innerHTML='<button class="cat on" onclick="selCat(this,\''+node.id+'\')">Barchasi</button>'+
+    kids.map(function(k){
+      return '<button class="cat" onclick="selCat(this,\''+k.id+'\')">'+
+             esc(((k.icon?k.icon+' ':'')+k.name))+'</button>';
+    }).join('');
+}
+// ── Sotuvchi formasi: kaskad dropdown ───────────────────────────────────────
+function catCascadeInit(preselectId){
+  loadCatTree(function(){
+    var s1=document.getElementById('f-cat1'); if(!s1) return;
+    s1.innerHTML='<option value="">Asosiy yo\'nalishni tanlang *</option>'+
+      CAT_TREE.map(function(c){
+        return '<option value="'+c.id+'">'+esc(((c.icon?c.icon+' ':'')+c.name))+'</option>';
+      }).join('');
+    catCascadeSet(preselectId||0);
+  });
+}
+// Mavjud mahsulotni tahrirlashda: kategoriya yo'lini (ota-bola) tiklaydi
+function catCascadeSet(catId){
+  var s1=document.getElementById('f-cat1'), s2=document.getElementById('f-cat2'),
+      s3=document.getElementById('f-cat3');
+  if(!s1) return;
+  s1.value=''; if(s2){s2.value='';s2.style.display='none';}
+  if(s3){s3.value='';s3.style.display='none';}
+  var node=catId?catFindNode(catId):null;
+  if(!node) return;
+  var path=[];
+  var cur=node;
+  while(cur){ path.unshift(cur); cur=cur.parent_id?catFindNode(cur.parent_id):null; }
+  if(path[0]){ s1.value=path[0].id; catCascade(1); }
+  if(path[1]&&s2){ s2.value=path[1].id; catCascade(2); }
+  if(path[2]&&s3){ s3.value=path[2].id; }
+}
+function catCascade(level){
+  var s1=document.getElementById('f-cat1'), s2=document.getElementById('f-cat2'),
+      s3=document.getElementById('f-cat3');
+  function fill(sel,kids,ph){
+    if(!sel) return;
+    if(!kids.length){ sel.style.display='none'; sel.innerHTML='<option value=""></option>'; return; }
+    sel.style.display='';
+    sel.innerHTML='<option value="">'+ph+'</option>'+kids.map(function(k){
+      return '<option value="'+k.id+'">'+esc(((k.icon?k.icon+' ':'')+k.name))+'</option>';
+    }).join('');
+  }
+  if(level===1){
+    var n1=s1&&s1.value?catFindNode(s1.value):null;
+    fill(s2,(n1&&n1.children)||[],'Bo\'limni tanlang');
+    fill(s3,[],'');
+  } else if(level===2){
+    var n2=s2&&s2.value?catFindNode(s2.value):null;
+    fill(s3,(n2&&n2.children)||[],'Aniq turini tanlang');
+  }
+}
+// Eng CHUQUR tanlangan daraja qaytadi (barg afzal)
+function catCascadeValue(){
+  var ids=['f-cat3','f-cat2','f-cat1'];
+  for(var i=0;i<ids.length;i++){
+    var el=document.getElementById(ids[i]);
+    if(el&&el.value) return parseInt(el.value,10);
+  }
+  return 0;
+}
+// ── Sotuvchiga eslatma: kategoriyasi aniqlashtirilmagan mahsulotlar ─────────
+function checkNeedsCategory(){
+  fetch('/api/catalog/needs_category?uid='+UID,{headers:_tgHeaders()})
+    .then(function(r){return r.json();}).then(function(d){
+      var box=document.getElementById('cat-warn');
+      if(!box) return;
+      if(!d||!d.ok||!d.count){ box.style.display='none'; return; }
+      box.style.display='';
+      box.innerHTML='<b>🗂 '+d.count+' ta mahsulotingiz kategoriyasi aniqlashtirilmagan.</b>'+
+        '<div style="font-size:12px;margin-top:3px;opacity:.9">Aniq kategoriya = xaridor tezroq topadi. '+
+        'Har bir mahsulotni ochib "Tahrirlash" dan kategoriyani tanlang.</div>'+
+        '<div style="margin-top:8px"><button onclick="showCatGuide()" style="border:none;border-radius:8px;padding:7px 12px;background:var(--primary);color:#fff;font-size:12px;font-weight:700;cursor:pointer">Qanday qilinadi?</button></div>';
+    }).catch(function(){});
+}
+function showCatGuide(){
+  var steps=[
+    ['1','Mahsulotlarim bo\'limini oching','Pastdagi menyudan "Mahsulotlarim" ni bosing.'],
+    ['2','Mahsulotni tanlang','Kategoriyasi aniqlashtirilmagan mahsulot ustiga bosing.'],
+    ['3','"✏️ Tahrirlash" ni bosing','Mahsulot formasi ochiladi.'],
+    ['4','Kategoriyani tanlang','Yuqoridan pastga: Asosiy yo\'nalish → Bo\'lim → Aniq turi. '+
+      'Iloji boricha eng oxirgi (aniq) darajani tanlang.'],
+    ['5','Saqlang','"Saqlash" tugmasini bosing — tayyor.']
+  ];
+  var html='<div style="padding:16px;max-width:600px;margin:0 auto">'+
+    '<button onclick="showView(\'catalog\',document.getElementById(\'nb-cat\'))" style="background:none;border:none;color:var(--primary);font-size:14px;cursor:pointer;margin-bottom:10px">← Ortga</button>'+
+    '<div style="font-size:18px;font-weight:800;margin-bottom:6px">🗂 Kategoriyani qanday biriktiraman?</div>'+
+    '<div style="font-size:13px;color:var(--hint);margin-bottom:14px">Kategoriya mahsulotingizni xaridor qidiruvida topilishini belgilaydi. '+
+    'Noto\'g\'ri yoki juda umumiy kategoriya = kamroq ko\'rish = kamroq sotuv.</div>'+
+    steps.map(function(st){
+      return '<div style="display:flex;gap:10px;background:var(--surface,#fff);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px">'+
+        '<div style="min-width:26px;height:26px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">'+st[0]+'</div>'+
+        '<div><div style="font-weight:700;font-size:14px">'+esc(st[1])+'</div>'+
+        '<div style="font-size:12.5px;color:var(--hint);margin-top:2px">'+esc(st[2])+'</div></div></div>';
+    }).join('')+
+    '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px;font-size:12.5px;color:#1d4ed8;margin-top:6px">'+
+    '<b>Misol:</b> "Kompozit plomba" uchun → 🦷 Terapevtik → Plombalash materiallari → Kompozitlar.</div>'+
+    '</div>';
+  document.getElementById('main').innerHTML=html;
+  document.getElementById('top-title').textContent='🗂 Qo\'llanma';
+}
+
 // ── BOSH SAHIFA ──────────────────────────────────────────────────────────────
 function loadHome(){
   var main = document.getElementById('main');
-  var cats = [['1','🦷','Terapevtik'],['2','⚙️','Jarrohlik'],['3','🔬','Zubtexnik'],
-    ['4','🧪','Dezinfeksiya'],['5','💡','Uskunalar'],['6','📸','Rentgen'],
-    ['7','🖥','CAD/CAM'],['8','🦴','Implantlar'],['9','💻','Stom Soft'],['10','🎓','Kurslar']];
-  var tiles = cats.map(function(c){
-    return '<button onclick="goCategory(\''+c[0]+'\')" style="border:1px solid var(--border);background:var(--card);border-radius:12px;padding:12px 4px;cursor:pointer;color:var(--text);display:flex;flex-direction:column;gap:5px;align-items:center;font-size:11.5px;font-weight:600">'+
-      '<span style="font-size:24px;line-height:1">'+c[1]+'</span>'+esc(c[2])+'</button>';
+  // Kategoriya daraxti hali kelmagan bo'lsa — kelgach qayta chizamiz
+  // (aks holda plitkalar bo'sh chiqib qoladi).
+  if(!_catTreeLoaded){
+    main.innerHTML='<div class="loading"><div class="spin"></div></div>';
+    loadCatTree(function(){ if(curView==='home') loadHome(); });
+    return;
+  }
+  // Kategoriyalar DB daraxtidan (CAT_TREE) — hardcode ro'yxat emas
+  var tiles = CAT_TREE.map(function(c){
+    return '<button onclick="goCategory(\''+c.id+'\')" style="border:1px solid var(--border);background:var(--card);border-radius:12px;padding:12px 4px;cursor:pointer;color:var(--text);display:flex;flex-direction:column;gap:5px;align-items:center;font-size:11.5px;font-weight:600">'+
+      '<span style="font-size:24px;line-height:1">'+esc(c.icon||'🗂')+'</span>'+esc(c.name)+'</button>';
   }).join('');
   main.innerHTML =
     '<div style="padding:14px 14px 6px;font-size:15px;font-weight:700">Kategoriyalar</div>'+
@@ -2277,6 +2496,15 @@ function selCat(btn, c) {
   if(c) track('category',{category_id:parseInt(c),category_name:btn.textContent.trim()});
   document.querySelectorAll('.cat').forEach(function(b){b.classList.remove('on');});
   btn.classList.add('on');
+  // 3 daraja: tanlangan kategoriyaning bolalari ikkinchi qatorda chiqadi.
+  // Asosiy (level-1) tanlansa sub qator yangilanadi; sub tanlansa qator qoladi.
+  try{
+    var node=c?catFindNode(c):null;
+    if(!c) renderSubChips(null);
+    else if(node && (node.children||[]).length) renderSubChips(c);
+    else if(node && node.parent_id) renderSubChips(node.parent_id);
+    else renderSubChips(null);
+  }catch(e){}
   loadCatalog();
 }
 
@@ -3901,7 +4129,12 @@ function statCard(icon, label, val, sub, color){
 }
 
 // ── 🤖 AI import (Telegram kanaldan) ────────────────────────────────────────
-var CATS_AI = {1:"Terapevtik",2:"Jarrohlik",3:"Zubtexnik",4:"Dezinfeksiya",5:"Uskunalar",6:"Rentgen",7:"CAD/CAM",8:"Implantlar",9:"Stom Soft",10:"Kurslar"};
+// AI qoralamalari uchun kategoriya ro'yxati — DB daraxtidan (hardcode emas)
+function _catsAI(){
+  var out={};
+  (function walk(ns){ (ns||[]).forEach(function(n){ out[n.id]=n.name; walk(n.children); }); })(CAT_TREE);
+  return out;
+}
 function showAiImport(){
   document.getElementById('top-title').textContent='🤖 AI import';
   var el=document.getElementById('main');
@@ -3974,7 +4207,8 @@ function loadDrafts(){
     var box=document.getElementById('ai-drafts'); if(!box) return;
     var arr=(d&&d.drafts)||[];
     if(!arr.length){ box.innerHTML='<div style="font-size:12px;color:var(--hint);padding:8px">Hozircha qoralama yo\'q.</div>'; return; }
-    var catOpts=function(sel){ var o=''; Object.keys(CATS_AI).forEach(function(k){ o+='<option value="'+k+'"'+(parseInt(k)===sel?' selected':'')+'>'+CATS_AI[k]+'</option>'; }); return o; };
+    var _CA=_catsAI();
+    var catOpts=function(sel){ var o=''; Object.keys(_CA).forEach(function(k){ o+='<option value="'+k+'"'+(parseInt(k)===sel?' selected':'')+'>'+_CA[k]+'</option>'; }); return o; };
     var h='<div style="font-size:13px;font-weight:700;margin:6px 2px 8px">📝 Tasdiqlash kutilmoqda ('+arr.length+')</div>';
     arr.forEach(function(x){
       var img=x.image_url?'<img src="'+x.image_url+'" style="width:100%;max-height:160px;object-fit:contain;background:#f5f5f5;border-radius:10px" onerror="this.style.display=\'none\'">':'';
@@ -4090,6 +4324,7 @@ function openEdit(pid){
       document.getElementById('e-price').value = p.price||'';
       document.getElementById('e-stock').value = p.stock||'';
       document.getElementById('e-desc').value  = p.description||'';
+      eCatCascadeInit(p.category_id||0);   // 🗂 mavjud kategoriyani tiklash
       // Unit
       var unitSel = document.getElementById('e-unit');
       if(unitSel){
@@ -4198,7 +4433,8 @@ function saveEdit(){
   fetch('/api/catalog/edit_product',{
     method:'POST', headers:{'Content-Type':'application/json'},
     body:JSON.stringify({
-      user_id: UID, product_id: pid,
+      user_id: UID, category_id:eCatValue(),
+      product_id: pid,
       name: name, price: price, unit: unit,
       stock: stock, description: desc,
       delivery_type: dType, delivery_days: dDays,
@@ -4600,6 +4836,7 @@ function openForm() {
   }
   document.getElementById('fpanel').classList.add('on');
   try{ renderFreeRegions(''); }catch(e){}   // 🆓 bepul-hudud chiplarini chizamiz
+  try{ catCascadeInit(0); }catch(e){}       // 🗂 kategoriya kaskadini to'ldiramiz
   // Kategoriya va filter tablari formanin ustiga chiqmasin
   var cw = document.querySelector('.cats-wrap');
   if(cw) cw.style.visibility = 'hidden';
@@ -4692,13 +4929,14 @@ function saveProduct() {
   var unit = (document.getElementById('f-unit')||{value:'dona'}).value||'dona';
   var stock = parseInt((document.getElementById('f-stock')||{value:'0'}).value)||0;
   var desc = (document.getElementById('f-desc')||{value:''}).value.trim();
-  var cats = Array.from(document.querySelectorAll('.cat-chk input:checked')).map(function(c){return parseInt(c.value);});
+  var _cc = catCascadeValue();
+  var cats = _cc ? [_cc] : [];
   console.log('[SP] name='+name+' price='+price+' cats='+cats.length);
   if (!UID) { alert('UID=0. Botni qayta oching!'); return; }
   if (!name) { alert('Mahsulot nomini kiriting!'); return; }
   if (!price||price<=0) { alert("Narx 0 dan katta bo'lishi kerak!"); return; }
   if (stock < 0) { alert("Stok manfiy bo'lishi mumkin emas!"); return; }
-  if (!cats.length) { alert("Yo'nalish tanlang!"); return; }
+  if (!cats.length) { alert("Kategoriyani tanlang!"); return; }
   var variants=[];
   document.querySelectorAll('.var-item').forEach(function(row){
     var id=row.id.replace('vr-','');
