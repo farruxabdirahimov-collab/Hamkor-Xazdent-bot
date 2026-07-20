@@ -909,20 +909,20 @@ body{
 </div>
 
 <div class="nav">
-  <button class="nb on" id="nb-cat" onclick="showView('catalog',this)">
+  <button class="nb on" id="nb-home" onclick="showView('home',this)">
+    <span class="nb-ic">🏠</span><span>Bosh</span>
+  </button>
+  <button class="nb" id="nb-cat" onclick="showView('catalog',this)">
     <span class="nb-ic">🛍</span><span>Katalog</span>
-  </button>
-  <button class="nb" id="nb-sales" onclick="showView('sales',this)">
-    <span class="nb-ic">🎁</span><span>Aksiya</span>
-  </button>
-  <button class="nb" id="nb-news" onclick="showView('news',this)">
-    <span class="nb-ic">🆕</span><span>Yangilik</span>
   </button>
   <button class="nb" id="nb-cart-btn" onclick="openCart()">
     <span class="nb-ic" style="position:relative;display:inline-block">
       🛒<span class="nb-badge" id="nb-cbadge"></span>
     </span>
     <span>Savat</span>
+  </button>
+  <button class="nb" id="nb-sales" onclick="showView('sales',this)">
+    <span class="nb-ic">🎁</span><span>Aksiya</span>
   </button>
   <button class="nb" id="nb-orders" onclick="showView('orders',this)">
     <span class="nb-ic">📋</span><span>Buyurtma</span>
@@ -1685,7 +1685,7 @@ function sendSupport(){
     });
 }
 
-var cart = {}, curCat = '', curSearch = '', curView = 'catalog', curDelivery = '', curInst = 0;
+var cart = {}, curCat = '', curSearch = '', curView = 'home', curDelivery = '', curInst = 0;
 var curCurr = 'uzs';   // 'uzs' yoki 'usd'
 var usdRate = 12800;   // API dan yangilanadi
 var usdUpdated = '';
@@ -1861,7 +1861,7 @@ document.querySelectorAll('.cat-chk').forEach(function(lbl) {
     // Hamkor ish muhiti — sotuvchi darhol o'z mahsulotlariga tushadi
     showView('my', document.getElementById('nb-my'));
   } else {
-    loadCatalog();
+    showView('home', document.getElementById('nb-home'));
   }
 })();
 
@@ -1963,8 +1963,11 @@ function showView(v, btn) {
   document.getElementById('srch-row').style.display = isCat ? 'block' : 'none';
   document.getElementById('cats').style.display = isCat ? 'flex' : 'none';
   document.getElementById('fab').classList.toggle('show', v === 'my' && ROLE === 'seller' && !_isOp());
-  if (v === 'catalog') {
+  if (v === 'home') {
     document.getElementById('top-title').textContent = '🛍 XazDent Market';
+    loadHome();
+  } else if (v === 'catalog') {
+    document.getElementById('top-title').textContent = '🛍 Katalog';
     loadCatalog();
   } else if (v === 'my') {
     document.getElementById('top-title').textContent = '📦 Mahsulotlarim';
@@ -2049,6 +2052,40 @@ function prodCardHtml(p){
 function _moreBtnHtml(){
   return '<div id="moreWrap" style="grid-column:1/-1;text-align:center;padding:14px 0">'+
     '<button class="abtn" style="max-width:220px;margin:0 auto" onclick="loadMoreCatalog()">Ko\'proq yuklash ↓</button></div>';
+}
+
+// ── BOSH SAHIFA ──────────────────────────────────────────────────────────────
+function loadHome(){
+  var main = document.getElementById('main');
+  var cats = [['1','🦷','Terapevtik'],['2','⚙️','Jarrohlik'],['3','🔬','Zubtexnik'],
+    ['4','🧪','Dezinfeksiya'],['5','💡','Uskunalar'],['6','📸','Rentgen'],
+    ['7','🖥','CAD/CAM'],['8','🦴','Implantlar'],['9','💻','Stom Soft'],['10','🎓','Kurslar']];
+  var tiles = cats.map(function(c){
+    return '<button onclick="goCategory(\''+c[0]+'\')" style="border:1px solid var(--border);background:var(--card);border-radius:12px;padding:12px 4px;cursor:pointer;color:var(--text);display:flex;flex-direction:column;gap:5px;align-items:center;font-size:11.5px;font-weight:600">'+
+      '<span style="font-size:24px;line-height:1">'+c[1]+'</span>'+esc(c[2])+'</button>';
+  }).join('');
+  main.innerHTML =
+    '<div style="padding:14px 14px 6px;font-size:15px;font-weight:700">Kategoriyalar</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:0 14px 6px">'+tiles+'</div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 14px 2px">'+
+      '<span style="font-size:15px;font-weight:700">🔥 Mashhur mahsulotlar</span>'+
+      '<span onclick="showView(\'catalog\',document.getElementById(\'nb-cat\'))" style="font-size:13px;color:var(--primary);cursor:pointer;font-weight:600">Barchasi →</span>'+
+    '</div>'+
+    '<div class="grid" id="home-prods"><div class="loading" style="grid-column:1/-1"><div class="spin"></div></div></div>';
+  fetch('/api/catalog?uid='+UID+'&offset=0').then(function(r){return r.json();}).then(function(d){
+    var box=document.getElementById('home-prods'); if(!box) return;
+    var prods=((d&&d.products)||[]).slice(0,8);
+    prods.forEach(function(p){ _prods[p.id]=p; });
+    box.innerHTML = prods.length ? prods.map(prodCardHtml).join('')
+      : '<div class="loading" style="grid-column:1/-1">Mahsulot yo\'q</div>';
+  }).catch(function(){ var b=document.getElementById('home-prods'); if(b) b.innerHTML=''; });
+}
+function goCategory(id){
+  showView('catalog', document.getElementById('nb-cat'));
+  var btn=null;
+  document.querySelectorAll('.cat').forEach(function(b){
+    if((b.getAttribute('onclick')||'').indexOf("'"+id+"'")>=0) btn=b; });
+  if(btn && typeof selCat==='function') selCat(btn, id);
 }
 
 function loadCatalog() {
