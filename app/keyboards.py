@@ -47,17 +47,17 @@ def kb_clinic(lg, uid=0, webapp_url=""):
     )
 
 def kb_seller(lg, uid=0, webapp_url=""):
-    """Sotuvchi klaviaturasi — WebApp tugmalari bilan."""
+    """Sotuvchi klaviaturasi — YANGI Uzum-uslub kabinet (/hamkor) ochadi."""
     if webapp_url and uid:
-        mkt_url = f"{webapp_url}/catalog?uid={uid}&role=seller"
-        add_url = f"{webapp_url}/catalog?uid={uid}&role=seller&action=add"
-        ord_url = f"{webapp_url}/catalog?uid={uid}&role=seller#orders"
+        # Yangi sotuvchi kabineti — barcha bo'lim shu ilovada (mahsulot/buyurtma/
+        # analitika/mablag'/reklama/hodim/obuna/AI). Eski catalog?role=seller emas.
+        cab_url = f"{webapp_url}/hamkor?uid={uid}"
         return rk(
-            [KeyboardButton(text="🛍 Dental Market",
-                           web_app=WebAppInfo(url=mkt_url))],
+            [KeyboardButton(text="🏪 Sotuvchi kabineti",
+                           web_app=WebAppInfo(url=cab_url))],
             [KeyboardButton(text="🤖 AI bilan qo\'shish"),
              KeyboardButton(text="➕ Mahsulot qo\'shish",
-                           web_app=WebAppInfo(url=add_url))],
+                           web_app=WebAppInfo(url=cab_url))],
             [KeyboardButton(text="🔔 Buyurtmalar"),
              KeyboardButton(text="💰 Hisobim")],
             [KeyboardButton(text="⚙️ Profil"),
@@ -65,7 +65,7 @@ def kb_seller(lg, uid=0, webapp_url=""):
         )
     # Fallback — WebApp URL yo'q
     return rk(
-        [KeyboardButton(text="🛍 Dental Market")],
+        [KeyboardButton(text="🏪 Sotuvchi kabineti")],
         [KeyboardButton(text="🤖 AI bilan qo\'shish"),
          KeyboardButton(text="➕ Mahsulot qo\'shish")],
         [KeyboardButton(text="🔔 Buyurtmalar"),
