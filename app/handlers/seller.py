@@ -287,8 +287,8 @@ async def my_shop(msg: Message):
         )
         return
     prod_count = (await db_get("SELECT COUNT(*) as c FROM products WHERE shop_id=? AND is_active=1", (shop["id"],)))["c"]
-    catalog_url = f"{WEBAPP_URL}/catalog?uid={uid}&role=seller" if WEBAPP_URL else None
-    add_url = f"{WEBAPP_URL}/catalog?uid={uid}&role=seller" if WEBAPP_URL else None
+    catalog_url = f"{WEBAPP_URL}/hamkor?uid={uid}" if WEBAPP_URL else None
+    add_url = f"{WEBAPP_URL}/hamkor?uid={uid}" if WEBAPP_URL else None
     kb_rows = []
     if catalog_url:
         kb_rows.append([ib("🛍 Katalog", web_app=WebAppInfo(url=catalog_url))])
