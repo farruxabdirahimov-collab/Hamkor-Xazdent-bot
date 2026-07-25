@@ -19,6 +19,10 @@ BUYER_BOT_TOKEN = os.getenv("BUYER_BOT_TOKEN", "").strip()  # xaridor bot (cross
 CHANNEL_ID      = os.getenv("CHANNEL_ID", "@xazdent")
 ADMIN_IDS       = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()]
 WEBAPP_URL      = os.getenv("WEBAPP_URL", "").rstrip("/")
+# 🏪 Sotuvchi kabineti DOMENI (xazdent.uz/hamkor emas — alohida subdomen).
+# Env bilan almashtirish mumkin; bo'sh bo'lsa WEBAPP_URL/hamkor ishlatiladi.
+HAMKOR_URL = os.getenv("HAMKOR_URL", "https://hamkor.xazdent.uz").rstrip("/")
+
 
 # Repo ildizi
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
