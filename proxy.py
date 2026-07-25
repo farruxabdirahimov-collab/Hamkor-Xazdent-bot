@@ -27,28 +27,24 @@ _SKIP_REQ = {"host", "content-length", "connection", "keep-alive", "transfer-enc
 _SKIP_RESP = {"connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade",
               "content-encoding", "content-length"}
 
-# Mahalliy beriladigan statik fayllar (sotuvchi UI)
+# Mahalliy beriladigan statik fayllar (faqat ikonkalar — tez va o'zgarmaydi).
+# ⚠️ catalog.html BU YERДА BERILMAYDI: u ESKI sotuvchi paneli nusxasi edi va
+# eskirib qolardi. Sotuvchi kabineti backend'да yagona joyда (hamkor.html).
 _LOCAL_FILES = {
-    "/catalog.html": "catalog.html",
     "/icon-192.png": "icon-192.png",
     "/icon-512.png": "icon-512.png",
 }
 
-
-def _serve_catalog():
-    path = os.path.join(WEBAPP_DIR, "catalog.html")
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
-            return web.Response(text=f.read(), content_type="text/html", charset="utf-8")
-    return None
+# hamkor.xazdent.uz uchun haqiqiy domen nomi — backend domen bo'yicha
+# yo'naltirish qilishi uchun uzatamiz (aks holda backend Railway ichki
+# domenini ko'radi va XARIDOR katalogini qaytaradi).
+PUBLIC_HOST = os.getenv("PUBLIC_HOST", "hamkor.xazdent.uz")
 
 
 async def _root(request):
-    """Bosh sahifa — sotuvchi katalogi (mahalliy fayl)."""
-    resp = _serve_catalog()
-    if resp is not None:
-        return resp
-    return await _proxy(request)  # zaxira: fayl yo'q bo'lsa upstream
+    """Bosh sahifa — YANGI sotuvchi kabineti (backend'даги /hamkor).
+    Mahalliy nusxa saqlanmaydi → kabinet har doim eng yangi versiya."""
+    return await _proxy(request, path_override="/hamkor")
 
 
 async def _local_file(request):
@@ -60,9 +56,16 @@ async def _local_file(request):
     return await _proxy(request)
 
 
-async def _proxy(request):
-    url = UPSTREAM + request.rel_url.raw_path_qs
+async def _proxy(request, path_override=None):
+    if path_override:
+        qs = request.rel_url.query_string
+        url = UPSTREAM + path_override + (("?" + qs) if qs else "")
+    else:
+        url = UPSTREAM + request.rel_url.raw_path_qs
     req_headers = {k: v for k, v in request.headers.items() if k.lower() not in _SKIP_REQ}
+    # Backend haqiqiy domenni bilishi uchun (domen bo'yicha yo'naltirish)
+    req_headers["X-Forwarded-Host"] = PUBLIC_HOST
+    req_headers.setdefault("X-Forwarded-Proto", "https")
     try:
         body = await request.read()
         async with aiohttp.ClientSession(auto_decompress=True) as s:
@@ -89,5 +92,5 @@ async def start_web():
     port = int(os.getenv("PORT", 8080))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    log.info(f"🌐 Hamkor web: 0.0.0.0:{port} (catalog mahalliy, /api → {UPSTREAM})")
+    log.info(f"🌐 Hamkor web: 0.0.0.0:{port} (/ → {UPSTREAM}/hamkor, host={PUBLIC_HOST})")
     return runner
