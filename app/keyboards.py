@@ -1,4 +1,5 @@
 from app.config import HAMKOR_URL
+from app.webtoken import cabinet_url
 from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton,
     ReplyKeyboardMarkup, KeyboardButton, WebAppInfo,
@@ -52,7 +53,7 @@ def kb_seller(lg, uid=0, webapp_url=""):
     if webapp_url and uid:
         # Yangi sotuvchi kabineti — barcha bo'lim shu ilovada (mahsulot/buyurtma/
         # analitika/mablag'/reklama/hodim/obuna/AI). Eski catalog?role=seller emas.
-        cab_url = f"{HAMKOR_URL}/?uid={uid}"
+        cab_url = cabinet_url(HAMKOR_URL, uid)
         return rk(
             [KeyboardButton(text="🏪 Sotuvchi kabineti",
                            web_app=WebAppInfo(url=cab_url))],

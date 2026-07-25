@@ -15,6 +15,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from app.runtime import bot, dp, router
 from app.config import (BOT_TOKEN, CHANNEL_ID, ADMIN_IDS, WEBAPP_URL, BASE_DIR, AD_PRICE_TOSHKENT, AD_PRICE_REGION, AD_PRICE_BOTH_AUD, AD_REGION_PRICES, AD_REGION_DEFAULT, HAMKOR_URL)
+from app.webtoken import cabinet_url
 from app.database import (init_db, get_user, db_run, db_get, db_all, db_insert, get_setting, update_setting, add_balance, get_next_room_code, generate_order_number, log_order_event, get_or_create_trust_score, update_trust_score, update_seller_metrics, get_pool)
 from app.texts import t, REGIONS, REGIONS_RU
 from app.keyboards import (ib, ik, kb_cancel, kb_clinic, kb_confirm, kb_deadline, kb_delivery, kb_lang, kb_regions, kb_role, kb_seller, kb_shop_cats, kb_units, rk)
@@ -287,8 +288,8 @@ async def my_shop(msg: Message):
         )
         return
     prod_count = (await db_get("SELECT COUNT(*) as c FROM products WHERE shop_id=? AND is_active=1", (shop["id"],)))["c"]
-    catalog_url = f"{HAMKOR_URL}/?uid={uid}" if WEBAPP_URL else None
-    add_url = f"{HAMKOR_URL}/?uid={uid}" if WEBAPP_URL else None
+    catalog_url = cabinet_url(HAMKOR_URL, uid) if WEBAPP_URL else None
+    add_url = cabinet_url(HAMKOR_URL, uid) if WEBAPP_URL else None
     kb_rows = []
     if catalog_url:
         kb_rows.append([ib("🛍 Katalog", web_app=WebAppInfo(url=catalog_url))])
