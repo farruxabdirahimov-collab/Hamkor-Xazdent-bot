@@ -31,6 +31,15 @@ async def _on_error(event):
     return True
 
 
+# DEV: sotuvchi botga yozgan har kim SINOVCHI (prod'da hech narsa qilmaydi)
+try:
+    from app import stage as _stg
+    dp.message.outer_middleware(_stg.tester_middleware())
+    dp.callback_query.outer_middleware(_stg.tester_middleware())
+except Exception as _me:
+    log.error(f"tester middleware xato: {_me}")
+
+
 async def main():
     await get_pool()   # umumiy bazaga ulanishni tekshiramiz
     # BOSQICH tekshiruvi: dev servis PROD bazasiga ulanib qolmasin
@@ -38,6 +47,8 @@ async def main():
         from app import stage as _stage
         await _stage.db_marker_check()
         if _stage.IS_DEV:
+            _n = await _stage.load_testers()
+            log.warning("DEV: %s sinovchi yuklandi", _n)
             _dc = "bor" if _stage.DEV_CHAT_ID else "YOQ (xabarlar yuborilmaydi)"
             log.warning("DEV REJIMI: chiqish xabarlari dev guruhiga yonaltiriladi, DEV_CHAT_ID=%s", _dc)
     except Exception as _se:
