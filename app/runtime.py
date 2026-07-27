@@ -20,3 +20,12 @@ router = Router()
 # Faqat chiqish chaqiruvlari uchun (send_message/...), polling qilinmaydi.
 buyer_bot = (Bot(token=BUYER_BOT_TOKEN, default=DefaultBotProperties(parse_mode="Markdown"))
              if BUYER_BOT_TOKEN else bot)
+
+# 🧪 DEV rejimi: BARCHA chiqish xabarlari shu YAGONA joyда ushlanadi va dev
+# guruhига yo'naltiriladi — haqiqiy sotuvchi/xaridorga hech narsa bormaydi.
+# Prod'да guard_bot hech narsa qilmaydi (kod bir xil qoladi).
+from app import stage as _stage          # noqa: E402
+guard_bot = _stage.guard_bot
+bot = guard_bot(bot, "seller_bot")
+if buyer_bot is not bot:
+    buyer_bot = guard_bot(buyer_bot, "buyer_bot")

@@ -33,6 +33,15 @@ async def _on_error(event):
 
 async def main():
     await get_pool()   # umumiy bazaga ulanishni tekshiramiz
+    # BOSQICH tekshiruvi: dev servis PROD bazasiga ulanib qolmasin
+    try:
+        from app import stage as _stage
+        await _stage.db_marker_check()
+        if _stage.IS_DEV:
+            _dc = "bor" if _stage.DEV_CHAT_ID else "YOQ (xabarlar yuborilmaydi)"
+            log.warning("DEV REJIMI: chiqish xabarlari dev guruhiga yonaltiriladi, DEV_CHAT_ID=%s", _dc)
+    except Exception as _se:
+        log.error(f"stage tekshiruvi xato: {_se}")
     dp.include_router(router)
     # hamkor.xazdent.uz uchun web-proxy (port 8080) — sotuvchi botga parallel
     try:
