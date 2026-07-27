@@ -37,6 +37,19 @@ async def send_log(text, level="INFO"):
         return
     _recent[key] = now
     body = f"{_ICON.get(level, 'ℹ️')} [{PROJECT_NAME}] {level}\n{text}"
+    # 🧪 DEV: loglar PROD log-guruhига TUSHMASIN (u yerда haqiqiy buyurtmalar
+    # kuzatiladi — dev sinovlari aralashса chalkashadi). Dev'да manzil
+    # DEV_CHAT_ID; u berilmagan bo'lsa umuman yuborilmaydi.
+    target = LOG_GROUP_ID
+    try:
+        from app import stage as _stage
+        if _stage.IS_DEV:
+            if not _stage.DEV_CHAT_ID:
+                return
+            target = _stage.DEV_CHAT_ID
+            body = f"🧪 {_stage.DEV_LABEL}\n{body}"
+    except Exception:
+        pass
     if len(body) > 3900:
         body = body[:3900] + "…"
     try:
@@ -44,7 +57,7 @@ async def send_log(text, level="INFO"):
         async with aiohttp.ClientSession() as s:
             await s.post(
                 f"https://api.telegram.org/bot{LOGGER_BOT_TOKEN}/sendMessage",
-                json={"chat_id": LOG_GROUP_ID, "text": body,
+                json={"chat_id": target, "text": body,
                       "disable_web_page_preview": True},
                 timeout=aiohttp.ClientTimeout(total=10),
             )

@@ -291,6 +291,47 @@ def tester_middleware():
     return mw
 
 
+# ── Sinovchi HAQIQIY do'kon egasi bo'lishi (dev'да) ─────────────────────────
+# Dev bazasidagi do'konlar HAQIQIY sotuvchilarники. Ular sinovchi emas, shu
+# sabab buyurtma xabari ularга ketmaydi — natijaда sotuvchi tomonини sinab
+# bo'lmaydi. Yechim: sinovchi dev'да do'konni O'Z NOMIGA oladi (FAQAT dev
+# bazasида; prod tegilmaydi, kunlik sinxronizatsiyaда qayta tiklanadi).
+async def list_shops(limit: int = 15):
+    if not IS_DEV:
+        return []
+    try:
+        from app.database import db_all
+        return await db_all(
+            "SELECT s.id, s.shop_name, s.owner_id, "
+            "  (SELECT COUNT(*) FROM products p WHERE p.shop_id=s.id) AS n "
+            "FROM shops s WHERE s.status='active' ORDER BY n DESC LIMIT ?", (int(limit),)) or []
+    except Exception as e:
+        log.warning("dev list_shops: %s", e)
+        return []
+
+
+async def takeover_shop(shop_id: int, tester_id: int):
+    """Do'konni sinovchi nomiga o'tkazadi → buyurtma xabari UNGA keladi."""
+    if not IS_DEV:
+        return False, "faqat dev muhitда"
+    if not is_tester(tester_id):
+        return False, "avval botга /start yozing (sinovchi bo'ling)"
+    try:
+        from app.database import db_get, db_run
+        sh = await db_get("SELECT id, shop_name, owner_id FROM shops WHERE id=?", (int(shop_id),))
+        if not sh:
+            return False, f"#{shop_id} do'kon topilmadi"
+        await db_run("UPDATE shops SET owner_id=? WHERE id=?", (int(tester_id), int(shop_id)))
+        await db_run("UPDATE catalog_orders SET seller_id=? WHERE shop_id=?",
+                     (int(tester_id), int(shop_id)))
+        log.warning("🧪 DEV: do'kon #%s (%s) sinovchi %s nomiga o'tkazildi",
+                    shop_id, sh.get("shop_name"), tester_id)
+        return True, sh.get("shop_name") or f"#{shop_id}"
+    except Exception as e:
+        log.error("dev takeover_shop: %s", e)
+        return False, str(e)[:120]
+
+
 def banner() -> dict:
     """Web ilovalar uchun holat (dev lentasi ko'rsatish uchun)."""
     return {

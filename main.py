@@ -31,6 +31,13 @@ async def _on_error(event):
     return True
 
 
+# DEV buyruqlari (/dev_shops, /dev_take) - prod'da jim turadi
+try:
+    from app.dev_cmds import router as _dev_router
+    dp.include_router(_dev_router)
+except Exception as _de:
+    log.error(f'dev buyruqlari ulanmadi: {_de}')
+
 # DEV: sotuvchi botga yozgan har kim SINOVCHI (prod'da hech narsa qilmaydi)
 try:
     from app import stage as _stg
