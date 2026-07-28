@@ -1,23 +1,33 @@
 # -*- coding: utf-8 -*-
-"""🧪 BOSQICH (stage): prod / dev — BITTA kod, ikkita muhit.
+"""🧪 BOSQICH (stage): prod / dev — BITTA kod, TO'LIQ ALOHIDA ikkita muhit.
 
-MUAMMO: hozir test PROD serverда qilinади va xabarlar HAQIQIY foydalanuvchilarга
-boradi. Kerak: prod bilan bir xil ishlaydigan dev muhit, lekin barcha chiqish
-xabarlari BIZГА keladi.
+MAQSAD: dev — HAQIQIY sinov muhiti. O'z botlari, o'z bazasi, o'z domeni.
+Sinovchi dev botга yozadi va bot UNGA JAVOB BERADI — xuddi prod kabi.
+Ya'ni buyurtma berish, taklif, chat, to'lov — hammasi boshidan oxirigacha
+haqiqiy tarzda sinaladi.
 
-YECHIM: kod BITTA. Farq faqat env'да. Dev'да chiqish kanallari BITTA joyда
-(«choke point») ushlanadi:
-    • Telegram  — bot obyektlarining send_*/edit_* metodlari (guard_bot)
-    • SMS       — app/sms.send_sms (dev'да SMS ketmaydi, matn dev guruhига)
-    • Web push  — dev'да yuborilmaydi
-Shu sabab YANGI funksiya yozganда hech narsa qo'shish KERAK EMAS: prod'да
-foydalanuvchiга, dev'да dev guruhига ketadi — o'z-o'zidan.
+XAVF va uni yopish: dev bazasi — PROD nusxasi, ya'ni ichида MINGLAB HAQIQIY
+foydalanuvchi id'si bor. Fon vazifalari yoki ommaviy xabar dev'да ishlaса,
+dev bot HAQIQIY odamlarга yozib yuborishi mumkin edi.
+
+Shu sabab dev'да odamlar IKKIGA bo'linadi:
+
+  1. SINOVCHI (tester) — dev botга O'ZI yozgan odam (yoki DEV_ALLOW_IDS'да).
+     Unга xabar TO'G'RIDAN, o'zgarishsiz boradi → HAQIQIY sinov.
+  2. Qolgan hamma (baza nusxasidagi haqiqiy foydalanuvchilar) —
+     xabar UNGA KETMAYDI. Kuzatish uchun dev guruhига «kimга ketishi kerak
+     edi» sarlavhasi bilan nusxa tushadi.
+
+Sinovchi RO'YXATDAN O'TISHI shart emas: dev botга /start yozса — avtomatik
+sinovchi bo'ladi (bu ongli harakat, ya'ni rozilik).
+
+Prod'да bu modulning HECH BIR qismi ishlamaydi — kod bir xil qoladi.
 
 Env:
   APP_STAGE=dev              — dev rejimi (standart: prod)
-  DEV_CHAT_ID=-100…          — barcha ushlangan xabarlar shu chatга ketadi
-  DEV_ALLOW_IDS=111,222      — bu ID'lar xabarni TO'G'RIDAN oladi (dev jamoasi)
-  DEV_LABEL="XAZDENT DEV"    — xabar boshidagi yorliq
+  DEV_CHAT_ID=-100…          — kuzatuv guruhi (sinovchi bo'lmaganlar nusxasi)
+  DEV_ALLOW_IDS=111,222      — doimiy sinovchilar (bot bilan gaplashmasa ham)
+  DEV_LABEL="XAZDENT DEV"    — kuzatuv nusxasidagi yorliq
 """
 import logging
 import os
@@ -71,21 +81,78 @@ async def _describe(chat_id) -> str:
     return f"id={cid}"
 
 
+# ── SINOVCHILAR (testers) ────────────────────────────────────────────────────
+# Dev botга o'zi yozgan har bir odam — sinovchi. Ular xabarni TO'G'RIDAN oladi,
+# ya'ni dev muhit ular uchun prod'дан farq qilmaydi (haqiqiy sinov).
+_TESTERS = set(DEV_ALLOW_IDS)
+
+
+def is_tester(chat_id) -> bool:
+    cid = _int(chat_id)
+    return cid is not None and cid in _TESTERS
+
+
+async def add_tester(chat_id, name: str = "", note: str = "") -> bool:
+    """Sinovchini ro'yxatga oladi (xotira + baza). Yangi bo'lsa True."""
+    cid = _int(chat_id)
+    if cid is None or not IS_DEV or cid in _TESTERS:
+        return False
+    _TESTERS.add(cid)
+    try:
+        from app.database import db_run
+        await db_run(
+            "INSERT INTO dev_testers(user_id, name, note) VALUES(?,?,?) "
+            "ON CONFLICT (user_id) DO NOTHING", (cid, (name or "")[:100], (note or "")[:200]))
+    except Exception as e:
+        log.warning("dev sinovchi saqlanmadi: %s", e)
+    log.warning("🧪 DEV: yangi sinovchi %s (%s) — endi xabarlar unga to'g'ridan boradi",
+                cid, name or "—")
+    return True
+
+
+async def load_testers():
+    """Ishga tushishда bazadan sinovchilarни o'qiymiz."""
+    if not IS_DEV:
+        return 0
+    try:
+        from app.database import db_all
+        rows = await db_all("SELECT user_id FROM dev_testers", ())
+        for r in (rows or []):
+            v = _int(r.get("user_id"))
+            if v:
+                _TESTERS.add(v)
+    except Exception as e:
+        log.warning("dev sinovchilar o'qilmadi: %s", e)
+    return len(_TESTERS)
+
+
+def testers() -> list:
+    return sorted(_TESTERS)
+
+
 def redirect(chat_id):
-    """(yangi_chat_id, ushlandimi). Prod'да hech narsa o'zgarmaydi."""
+    """(yangi_chat_id, kuzatuv_nusxasimi). Prod'да hech narsa o'zgarmaydi.
+
+    Dev'да:
+      • sinovchi        → TO'G'RIDAN, o'zgarishsiz (haqiqiy sinov)
+      • boshqa har kim  → unга KETMAYDI; dev guruhига kuzatuv nusxasi
+    """
     if not IS_DEV:
         STATS["direct"] += 1
         return chat_id, False
     cid = _int(chat_id)
-    if cid is not None and cid in DEV_ALLOW_IDS:
+    if cid is not None and cid in _TESTERS:
         STATS["direct"] += 1
-        return chat_id, False          # dev jamoasi o'zi — to'g'ridan olsin
-    if DEV_CHAT_ID and str(chat_id).strip() == DEV_CHAT_ID:
-        STATS["direct"] += 1
-        return chat_id, False          # allaqachon dev guruhi — sarlavha shart emas
+        return chat_id, False          # 🧪 SINOVCHI — prod kabi ishlaydi
+    if cid is not None and cid < 0:
+        # Guruh: dev guruhining o'zi bo'lsa to'g'ridan; boshqa guruh (prod
+        # nusxasidagi sotuvchi guruhlari) — hech qachon emas.
+        if DEV_CHAT_ID and str(chat_id).strip() == DEV_CHAT_ID:
+            STATS["direct"] += 1
+            return chat_id, False
     if not DEV_CHAT_ID:
         STATS["dropped"] += 1
-        return None, True              # dev chat berilmagan → YUBORMAYMIZ
+        return None, True              # kuzatuv guruhi yo'q → YUBORMAYMIZ
     STATS["redirected"] += 1
     return DEV_CHAT_ID, True
 
@@ -118,7 +185,9 @@ def guard_bot(bot, name: str = "bot"):
                 return None
             if caught:
                 who = await _describe(chat_id)
-                head = f"🧪 {DEV_LABEL} · {mname}\n👤 ASLIDA: {who}\n────────────\n"
+                head = (f"🧪 {DEV_LABEL} · KUZATUV · {mname}\n"
+                        f"👤 Bu xabar {who} ga ketishi kerak edi — "
+                        f"u sinovchi emas, YUBORILMADI.\n────────────\n")
                 # Matnli metodlarда sarlavhani matn boshiga qo'shamiz
                 if mname == "send_message":
                     if a:
@@ -200,6 +269,69 @@ async def db_marker_check():
     return marker
 
 
+def tester_middleware():
+    """aiogram outer-middleware: dev botга YOZGAN har kim — sinovchi.
+
+    Shu tufayli sinovchi hech qanday ro'yxatdan o'tmaydi: dev botга /start
+    yozadi va o'sha zahoti bot unга prod kabi javob bera boshlaydi.
+    Prod'да middleware o'rnatilса ham hech narsa qilmaydi."""
+    async def mw(handler, event, data):
+        if IS_DEV:
+            try:
+                u = getattr(event, "from_user", None)
+                if u is not None and not u.is_bot:
+                    if not is_tester(u.id):
+                        nm = " ".join(x for x in (getattr(u, "first_name", ""),
+                                                  getattr(u, "last_name", "")) if x)
+                        await add_tester(u.id, nm or (getattr(u, "username", "") or ""),
+                                         "dev botга yozdi")
+            except Exception as e:
+                log.debug("tester_middleware: %s", e)
+        return await handler(event, data)
+    return mw
+
+
+# ── Sinovchi HAQIQIY do'kon egasi bo'lishi (dev'да) ─────────────────────────
+# Dev bazasidagi do'konlar HAQIQIY sotuvchilarники. Ular sinovchi emas, shu
+# sabab buyurtma xabari ularга ketmaydi — natijaда sotuvchi tomonини sinab
+# bo'lmaydi. Yechim: sinovchi dev'да do'konni O'Z NOMIGA oladi (FAQAT dev
+# bazasида; prod tegilmaydi, kunlik sinxronizatsiyaда qayta tiklanadi).
+async def list_shops(limit: int = 15):
+    if not IS_DEV:
+        return []
+    try:
+        from app.database import db_all
+        return await db_all(
+            "SELECT s.id, s.shop_name, s.owner_id, "
+            "  (SELECT COUNT(*) FROM products p WHERE p.shop_id=s.id) AS n "
+            "FROM shops s WHERE s.status='active' ORDER BY n DESC LIMIT ?", (int(limit),)) or []
+    except Exception as e:
+        log.warning("dev list_shops: %s", e)
+        return []
+
+
+async def takeover_shop(shop_id: int, tester_id: int):
+    """Do'konni sinovchi nomiga o'tkazadi → buyurtma xabari UNGA keladi."""
+    if not IS_DEV:
+        return False, "faqat dev muhitда"
+    if not is_tester(tester_id):
+        return False, "avval botга /start yozing (sinovchi bo'ling)"
+    try:
+        from app.database import db_get, db_run
+        sh = await db_get("SELECT id, shop_name, owner_id FROM shops WHERE id=?", (int(shop_id),))
+        if not sh:
+            return False, f"#{shop_id} do'kon topilmadi"
+        await db_run("UPDATE shops SET owner_id=? WHERE id=?", (int(tester_id), int(shop_id)))
+        await db_run("UPDATE catalog_orders SET seller_id=? WHERE shop_id=?",
+                     (int(tester_id), int(shop_id)))
+        log.warning("🧪 DEV: do'kon #%s (%s) sinovchi %s nomiga o'tkazildi",
+                    shop_id, sh.get("shop_name"), tester_id)
+        return True, sh.get("shop_name") or f"#{shop_id}"
+    except Exception as e:
+        log.error("dev takeover_shop: %s", e)
+        return False, str(e)[:120]
+
+
 def banner() -> dict:
     """Web ilovalar uchun holat (dev lentasi ko'rsatish uchun)."""
     return {
@@ -207,6 +339,6 @@ def banner() -> dict:
         "is_dev": IS_DEV,
         "label": DEV_LABEL if IS_DEV else "",
         "dev_chat_set": bool(DEV_CHAT_ID),
-        "allow_ids": len(DEV_ALLOW_IDS),
+        "testers": len(_TESTERS) if IS_DEV else 0,
         "intercepted": dict(STATS),
     }
