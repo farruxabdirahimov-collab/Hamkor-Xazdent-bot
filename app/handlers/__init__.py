@@ -3,6 +3,9 @@
 
 start eng birinchi (cmd_start + menyu), keyin qolganlari.
 """
+# 🔗 seller_link ENG BIRINCHI: `/start slink_...` ni `cmd_start`
+# dan OLDIN ushlashi kerak (aiogram ro'yxat tartibida tekshiradi).
+from app import seller_link  # noqa: F401  panelni botga ulash
 from . import start       # noqa: F401  cmd_start, onboarding, menyu (Buyurtmalar/Yordam)
 from . import seller      # noqa: F401  ehtiyojlar feed, takliflar, do'kon, statistika, mahsulotlar
 from . import balance     # noqa: F401  💰 Hisobim + to'ldirish
