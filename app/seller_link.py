@@ -129,8 +129,8 @@ async def slink_kontakt(msg: Message):
 
     if not panel:
         await msg.answer(
-            "❌ Panel akkauntingizda tasdiqlangan telefon raqami yo'q.\n\n"
-            "Avval panelda raqamingizni SMS kod bilan tasdiqlang.",
+            "❌ Panel akkauntingizda telefon raqami yo'q.\n\n"
+            "Avval panelda raqamingizni kiriting, so'ng qayta ulang.",
             reply_markup=ReplyKeyboardRemove())
         return
 
@@ -162,6 +162,12 @@ async def slink_kontakt(msg: Message):
                 "INSERT INTO auth_identities(user_id,provider,provider_uid,"
                 "email,display_name) VALUES(?,?,?,?,?)",
                 (uid, "telegram", str(tgid), None, msg.from_user.username))
+        # ✅ Raqam Telegram tomonidan tasdiqlangan va paneldagi raqam bilan
+        # mos tushdi — demak telefon TASDIQLANGAN. Botdan kelgan eski
+        # sotuvchilarda `phone_verified` qo'yilmagan edi; shu qadam uni
+        # yopadi va ular boshqa SMS so'ralmaydi.
+        await db_run(
+            "UPDATE users SET phone_verified=1 WHERE id=?", (uid,))
         await db_run("DELETE FROM seller_tg_link WHERE code=?", (row["code"],))
     except Exception as e:
         log.error("slink bog'lash xato (uid=%s): %s", uid, e)
