@@ -202,6 +202,12 @@ def guard_bot(bot, name: str = "bot"):
                 # Reply id boshqa chatда — olib tashlaymiz (aks holda xato)
                 kw.pop("reply_to_message_id", None)
                 kw.pop("message_thread_id", None)
+                # ⚠️ MUHIM: kuzatuv nusxasi — DIAGNOSTIK matn. Sarlavha + asl
+                # matn birikkanda Markdown BUZILADI (masalan `*...*` juftligi)
+                # va Telegram xabarни RAD etadi ("can't parse entities"). Shu
+                # sabab ushlangan nusxa DOIM oddiy matn (parse_mode=None) —
+                # yetkazish KAFOLATLANADI, formatlash muhim emas.
+                kw["parse_mode"] = None
             return await orig(new_id, *a, **kw)
         return inner
 

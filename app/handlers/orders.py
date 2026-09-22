@@ -268,61 +268,99 @@ async def checkout_pay_cod(call: CallbackQuery, state: FSMContext):
     except Exception as e:
         log.error(f"Sotuvchiga xabar: {e}")
 
-# ── Web savat buyurtmasi: sotuvchi tasdiqlaydi/rad etadi (xaridorga buyer_bot orqali) ──
-@router.callback_query(F.data.startswith("co_confirm_"))
-async def hk_catalog_confirm(call: CallbackQuery):
+# ═══ Web savat buyurtmasi: QABUL / RAD ════════════════════════════
+# ⚠️ MANTIQ BU YERDA EMAS. Buyurtma holatini o'zgartirish PULGA
+# tegadi: stokni qaytarish, pul qaytarish so'rovini ochish, BTS
+# jo'natmasini bekor qilish, xaridorga xabar. Bularning hammasi asosiy
+# servisda (`sotuvchi_qabul_rad`) — va kabinet ham AYNAN o'shani
+# chaqiradi. Shuning uchun bu yerda faqat CHAQIRUV.
+#
+# Ilgari bu yerda soddalashtirilgan NUSXA bor edi va unda:
+#   • `WHERE seller_id=call.from_user.id` — sotuvchi uid'i MANFIY
+#     bo'lsa (login/parol bilan kirgan) HECH NIMA yangilanmasdi, lekin
+#     bot «qabul qilindi» deb yolg'on aytardi va xaridorga ham
+#     shunday xabar ketardi;
+#   • rad etishda egalik umuman tekshirilmasdi (IDOR);
+#   • rad etishda stok qaytarilmasdi va pul qaytarish OCHILMASDI —
+#     to'langan buyurtma bekor qilinsa mijozning puli bizda qolardi.
+
+async def _ichki_amal(call: CallbackQuery, action: str):
+    """Asosiy servisdagi yagona mantiqni chaqiradi.
+
+    → True (bajarildi) yoki False (bajarilmadi, sabab aytildi)."""
+    import aiohttp as _ah
     parts = call.data.split("_")
     try:
-        order_id = int(parts[2]); buyer_id = int(parts[3])
+        order_id = int(parts[2])
     except Exception:
-        await call.answer(); return
-    seller = call.from_user.id
-    await db_run(
-        "UPDATE catalog_orders SET status='confirmed', "
-        "confirmed_at=to_char(now(),'YYYY-MM-DD HH24:MI:SS') WHERE id=? AND seller_id=?",
-        (order_id, seller))
-    await notify_order_event(order_id, "confirmed", seller)
+        await call.answer()
+        return False, 0
+
+    base = (os.getenv("WEB_UPSTREAM")
+            or "https://xazdent-bot-production.up.railway.app").rstrip("/")
+    kalit = (os.getenv("INTERNAL_API_KEY") or "").strip()
+    if not kalit:
+        log.error("INTERNAL_API_KEY yo'q — buyurtma amali bajarilmadi")
+        await call.answer("Sozlama xatosi. Administratorga xabar bering.",
+                          show_alert=True)
+        return False, order_id
+    try:
+        async with _ah.ClientSession() as ss:
+            async with ss.post(
+                    base + "/api/internal/seller_action",
+                    json={"tg_id": int(call.from_user.id),
+                          "order_id": order_id, "action": action},
+                    # ⚠️ Cloudflare Python'ning standart User-Agent'ini
+                    # bloklaydi (HTTP 403, "error code: 1010"). Shuning
+                    # uchun UA ni ATAYLAB almashtiramiz.
+                    headers={"X-Internal-Key": kalit,
+                             "User-Agent": "curl/8.4.0"},
+                    timeout=_ah.ClientTimeout(total=30)) as r:
+                d = await r.json(content_type=None)
+    except Exception as e:
+        log.error("ichki amal xato (#%s, %s): %s", order_id, action, e)
+        await call.answer("Tarmoq xatosi — birozdan so'ng qayta urinib ko'ring.",
+                          show_alert=True)
+        return False, order_id
+
+    if not (d or {}).get("ok"):
+        await call.answer((d or {}).get("message")
+                          or "Amal bajarilmadi.", show_alert=True)
+        return False, order_id
+    return True, order_id
+
+
+@router.callback_query(F.data.startswith("co_confirm_"))
+async def hk_catalog_confirm(call: CallbackQuery):
+    ok, order_id = await _ichki_amal(call, "confirm")
+    if not ok:
+        return
     try:
         await call.message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
+    # ℹ️ Xaridorga xabarni ASOSIY servis yuboradi — bu yerda
+    # takrorlamaymiz (aks holda mijoz ikki marta xabar olardi).
     await call.message.answer(
         f"✅ *Buyurtma #{order_id} qabul qilindi!*\n\n"
         f"Xaridorga xabar yuborildi. Yetkazib bergach, 48 soatdan keyin\n"
         f"baholash so'rovi avtomatik ketadi.")
-    # MAXFIYLIK: do'kon nomi xaridorga KO'RSATILMAYDI
-    try:
-        await buyer_bot.send_message(
-            buyer_id,
-            f"✅ *Buyurtmangiz qabul qilindi!*\n\n"
-            f"Sotuvchi buyurtmangizni tasdiqladi va jo'natmoqda.\n\n"
-            f"_Yetib kelgach so'raymiz._")
-    except Exception as e:
-        log.error(f"co_confirm buyer notify xato: {e}")
     await call.answer("✅ Tasdiqlandi!")
 
 
 @router.callback_query(F.data.startswith("co_reject_"))
 async def hk_catalog_reject(call: CallbackQuery):
-    parts = call.data.split("_")
-    try:
-        order_id = int(parts[2]); buyer_id = int(parts[3])
-    except Exception:
-        await call.answer(); return
-    await db_run("UPDATE catalog_orders SET status='rejected' WHERE id=?", (order_id,))
-    await notify_order_event(order_id, "rejected", call.from_user.id)
+    ok, order_id = await _ichki_amal(call, "reject")
+    if not ok:
+        return
     try:
         await call.message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
-    await call.message.answer(f"❌ Buyurtma #{order_id} rad etildi.")
-    try:
-        await buyer_bot.send_message(
-            buyer_id,
-            "❌ *Kechirasiz!*\n\nSotuvchida bu mahsulot hozir mavjud emas.\n"
-            "Boshqa sotuvchilardan qidirishingiz mumkin 👉 @XazdentBot")
-    except Exception:
-        pass
+    await call.message.answer(
+        f"❌ Buyurtma #{order_id} rad etildi.\n\n"
+        f"_To'langan bo'lsa — mijozga pul qaytarish so'rovi avtomatik "
+        f"ochildi, stok qaytarildi._")
     await call.answer("❌ Rad etildi")
 
 
@@ -614,87 +652,12 @@ async def order_not_received(call: CallbackQuery):
         except: pass
 
 
-@router.callback_query(F.data.startswith("co_confirm_"))
-async def catalog_order_confirm(call: CallbackQuery):
-    """Sotuvchi buyurtmani qabul qildi."""
-    parts    = call.data.split("_")
-    order_id = int(parts[2])
-    buyer_id = int(parts[3])
-    seller   = call.from_user.id
-
-    await db_run(
-        "UPDATE catalog_orders SET status='confirmed', confirmed_at=to_char(now(),'YYYY-MM-DD HH24:MI:SS') "
-        "WHERE id=? AND seller_id=?",
-        (order_id, seller)
-    )
-
-    # ── Birinchi buyurtma bonusi — sotuvchi balansiga ────────────────
-    # Xaridorning avvalgi tasdiqlangan buyurtmalari sonini tekshiramiz
-    prev_orders = await db_get(
-        "SELECT COUNT(*) as cnt FROM catalog_orders "
-        "WHERE buyer_id=? AND status='confirmed' AND id!=?",
-        (buyer_id, order_id)
-    )
-    is_first = (prev_orders["cnt"] if prev_orders else 0) == 0
-    bonus_ball = 50  # 50 ball = settings da 1 ball narxi bo'yicha
-    if is_first:
-        await db_run(
-            "UPDATE users SET balance = COALESCE(balance,0) + ? WHERE id=?",
-            (bonus_ball, seller)
-        )
-        log.info(f"🎁 Birinchi buyurtma bonusi: seller={seller}, buyer={buyer_id}, ball={bonus_ball}")
-
-    # Sotuvchiga tasdiqlash xabari
-    await call.message.edit_reply_markup(reply_markup=None)
-    bonus_msg = f"\n\n🎁 *+{bonus_ball} ball!* Yangi mijoz uchun bonus!" if is_first else ""
-    await call.message.answer(
-        f"✅ *Buyurtma #{order_id} qabul qilindi!*\n\n"
-        f"Xaridorga xabar yuborildi. 48 soatdan keyin\n"
-        f"baholash so\'rovi avtomatik ketadi."
-        f"{bonus_msg}"
-    )
-
-    # Xaridorga xabar
-    u = await get_user(seller)
-    shop = await db_get("SELECT shop_name FROM shops WHERE owner_id=?", (seller,))
-    sname = (shop["shop_name"] if shop else None) or (u["clinic_name"] if u else None) or "Sotuvchi"
-    try:
-        first_txt = "\n\n🎉 _Birinchi buyurtmangiz uchun tabriklaymiz!_" if is_first else ""
-        await buyer_bot.send_message(
-            buyer_id,
-            f"✅ *Buyurtmangiz qabul qilindi!*\n\n"
-            f"🏪 *{sname}* buyurtmangizni tasdiqladi va\n"
-            f"jo\'natmoqda.\n\n"
-            f"_48 soatdan keyin yetib kelganini so\'raymiz._"
-            f"{first_txt}"
-        )
-    except Exception as e:
-        log.error(f"Buyer notify xato: {e}")
-    await call.answer("✅ Tasdiqlandi!")
-
-@router.callback_query(F.data.startswith("co_reject_"))
-async def catalog_order_reject(call: CallbackQuery):
-    """Sotuvchi buyurtmani rad etdi."""
-    parts    = call.data.split("_")
-    order_id = int(parts[2])
-    buyer_id = int(parts[3])
-
-    await db_run(
-        "UPDATE catalog_orders SET status='rejected' WHERE id=?", (order_id,)
-    )
-    await call.message.edit_reply_markup(reply_markup=None)
-    await call.message.answer(f"❌ Buyurtma #{order_id} rad etildi.")
-
-    try:
-        await buyer_bot.send_message(
-            buyer_id,
-            f"❌ *Kechirasiz!*\n\n"
-            f"Sotuvchida bu mahsulot hozir mavjud emas.\n"
-            f"Boshqa sotuvchilardan qidirishingiz mumkin:\n\n"
-            f"👉 @XazdentBot → 🛍 Dental Market"
-        )
-    except Exception: pass
-    await call.answer("❌ Rad etildi")
+# ✖️ OLIB TASHLANDI: `co_confirm_` va `co_reject_` uchun IKKINCHI,
+# eskirgan handlerlar shu yerda edi. Ular hech qachon ishlamasdi
+# (yuqoridagilar oldin ro'yxatga olinadi), lekin ichida jiddiy
+# xatolar bor edi: sotuvchiga 50 ball berish (bunday model yo'q),
+# xaridorga DO'KON NOMINI yuborish (maxfiylik qoidasini buzadi) va
+# egalik tekshiruvisiz rad etish. Ikki nusxa = ikki xil xulq.
 
 @router.callback_query(F.data.startswith("co_delivered_"))
 async def catalog_order_delivered(call: CallbackQuery):
