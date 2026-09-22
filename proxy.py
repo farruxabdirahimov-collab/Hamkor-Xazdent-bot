@@ -20,6 +20,12 @@ log = logging.getLogger("app.proxy")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WEBAPP_DIR = os.path.join(BASE_DIR, "webapp")
 
+# ⚠️ WEB_UPSTREAM — asosiy servisning TO'G'RIDAN-TO'G'RI Railway manzili
+# bo'lishi SHART. Uni Cloudflare orqali o'tadigan domenga (xazdent.uz /
+# admin.xazdent.uz) qo'ymang: bu servis hamkor.xazdent.uz ni ham o'zi
+# xizmat qiladi, so'rov Cloudflare'ga qaytib kelib halqa hosil qiladi va
+# hamkor.xazdent.uz 502 bera boshlaydi. 2026-09-22 da aynan shunday
+# bo'ldi — sayt bir necha daqiqa ishlamay qoldi.
 UPSTREAM = os.getenv("WEB_UPSTREAM", "https://xazdent-bot-production.up.railway.app").rstrip("/")
 
 # Uzatilmaydigan (hop-by-hop / qayta hisoblanadigan) sarlavhalar
