@@ -330,22 +330,36 @@ async def _ichki_amal(call: CallbackQuery, action: str):
     return True, order_id
 
 
-@router.callback_query(F.data.startswith("co_confirm_"))
-async def hk_catalog_confirm(call: CallbackQuery):
-    ok, order_id = await _ichki_amal(call, "confirm")
-    if not ok:
+async def _karta_emasmi_tozala(call, order_id):
+    """🔄 Buyurtma kartasini ASOSIY servis holatga qarab o'zi yangilaydi
+    (matn + tugmalar). Shu sabab bu yerda uni BUZMAYMIZ.
+
+    Bosilgan xabar karta EMAS bo'lsa (eski nusxa) — faqat uning
+    tugmalarini olib tashlaymiz, eskirgan tugma turib qolmasin."""
+    try:
+        r = await db_get("SELECT seller_msg_bot, seller_msg_chat, seller_msg_id "
+                         "FROM catalog_orders WHERE id=?", (int(order_id),))
+        karta = bool(r and (r.get("seller_msg_bot") or "seller") == "seller"
+                     and int(r.get("seller_msg_chat") or 0) == int(call.message.chat.id)
+                     and int(r.get("seller_msg_id") or 0) == int(call.message.message_id))
+    except Exception:
+        karta = False
+    if karta:
         return
     try:
         await call.message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
-    # ℹ️ Xaridorga xabarni ASOSIY servis yuboradi — bu yerda
-    # takrorlamaymiz (aks holda mijoz ikki marta xabar olardi).
-    await call.message.answer(
-        f"✅ *Buyurtma #{order_id} qabul qilindi!*\n\n"
-        f"Xaridorga xabar yuborildi. Yetkazib bergach, 48 soatdan keyin\n"
-        f"baholash so'rovi avtomatik ketadi.")
-    await call.answer("✅ Tasdiqlandi!")
+
+
+@router.callback_query(F.data.startswith("co_confirm_"))
+async def hk_catalog_confirm(call: CallbackQuery):
+    ok, order_id = await _ichki_amal(call, "confirm")
+    if not ok:
+        return
+    # ℹ️ Xaridorga xabarni ASOSIY servis yuboradi — bu yerda takrorlamaymiz.
+    await _karta_emasmi_tozala(call, order_id)
+    await call.answer("✅ Buyurtma qabul qilindi!")
 
 
 @router.callback_query(F.data.startswith("co_reject_"))
@@ -353,15 +367,9 @@ async def hk_catalog_reject(call: CallbackQuery):
     ok, order_id = await _ichki_amal(call, "reject")
     if not ok:
         return
-    try:
-        await call.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        pass
-    await call.message.answer(
-        f"❌ Buyurtma #{order_id} rad etildi.\n\n"
-        f"_To'langan bo'lsa — mijozga pul qaytarish so'rovi avtomatik "
-        f"ochildi, stok qaytarildi._")
-    await call.answer("❌ Rad etildi")
+    await _karta_emasmi_tozala(call, order_id)
+    await call.answer("❌ Rad etildi. To'langan bo'lsa — pul mijozga qaytariladi.",
+                      show_alert=True)
 
 
 @router.callback_query(F.data.startswith("ord_accept_"))
