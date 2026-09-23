@@ -32,7 +32,12 @@ def make_web_token(user_id, jti: str = "") -> str:
     return base64.urlsafe_b64encode(msg + b"." + sig).decode().rstrip("=")
 
 
-def cabinet_url(base: str, uid) -> str:
-    """Sotuvchi kabineti havolasi — uid + imzolangan wtok bilan."""
-    base = (base or "").rstrip("/")
-    return f"{base}/?uid={int(uid)}&wtok={make_web_token(uid)}"
+def cabinet_url(base: str, uid=None) -> str:
+    """Sotuvchi kabineti havolasi — TOKENSIZ (2026-09-23).
+
+    🔐 Hamkor paneliga FAQAT login/parol bilan kiriladi. Ilgari bu yerda
+    uid + jti'siz imzolangan `wtok` qo'shilardi — Telegram akkaunti egasi
+    panelga PAROLSIZ kirardi va bu tokenni bekor qilib bo'lmasdi (server
+    endi jti'siz tokenni rad etadi). `uid` parametri eski chaqiruvlar
+    buzilmasin deb qoldirildi, ishlatilmaydi."""
+    return (base or "").rstrip("/") + "/"
