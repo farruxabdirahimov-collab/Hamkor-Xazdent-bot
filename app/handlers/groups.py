@@ -429,13 +429,7 @@ async def fallback(msg: Message, state: FSMContext):
     current = await state.get_state()
     if current:
         return  # FSM davom etayotgan bo'lsa ignore
-    u  = await get_user(msg.from_user.id)
-    lg = (u["lang"] if u else None) or "uz"
-    if u and u["role"] in ("clinic", "zubtex"):
-        await msg.answer("🏥 *Klinika paneli*", reply_markup=kb_clinic(lg, uid=msg.from_user.id, webapp_url=WEBAPP_URL))
-    elif u and u["role"] == "seller":
-        uid2 = msg.from_user.id
-        await msg.answer("🛒 *Sotuvchi paneli*", reply_markup=kb_seller(lg, uid=uid2, webapp_url=WEBAPP_URL))
-    else:
-        await msg.answer(t(lg, "welcome"), reply_markup=kb_lang())
+    # 🔐 Hamkor bot — faqat ulangan sotuvchi menyusi (klinika/rol tanlash YO'Q)
+    from app.handlers.start import menyu_yoki_ulash
+    await menyu_yoki_ulash(msg)
 

@@ -64,6 +64,85 @@ async def _jadval():
                  "created_at BIGINT)")
 
 
+# ── 🔐 Kim ULANGAN sotuvchi? (2026-09-23) ────────────────────────────────
+# Bog'lanish `auth_identities` da provider='tg_seller' bilan saqlanadi.
+# ⚠️ NEGA 'telegram' EMAS: server har ishga tushganda HAR BIR foydalanuvchi
+# uchun `telegram:<o'z id>` yozuvini avtomatik yaratadi (UNIQUE provider+id).
+# Shu sabab botdan avval foydalangan odam sotuvchi akkauntini 'telegram'
+# bilan ulay olmasdi («boshqa hisobga ulangan» xatosi).
+async def ulangan_sotuvchi(tgid):
+    """Shu Telegram akkauntiga ulangan VA login/paroli bor sotuvchi uid'i.
+
+    Nomzodlar: 'tg_seller' bog'lanishi → eski 'telegram' bog'lanishi →
+    Telegram id'ning o'zi (bot orqali ochilgan eski do'kon). Faqat do'koni
+    va panel logini borlar hisoblanadi. Yo'q bo'lsa None."""
+    tgid = int(tgid or 0)
+    if not tgid:
+        return None
+    try:
+        rows = await db_all(
+            "SELECT user_id, provider FROM auth_identities "
+            "WHERE provider IN ('tg_seller','telegram') AND provider_uid=?",
+            (str(tgid),))
+    except Exception:
+        rows = []
+    nomzod = ([int(r["user_id"]) for r in (rows or []) if r["provider"] == "tg_seller"]
+              + [int(r["user_id"]) for r in (rows or []) if r["provider"] == "telegram"]
+              + [tgid])
+    korilgan = set()
+    for uid in nomzod:
+        if uid in korilgan:
+            continue
+        korilgan.add(uid)
+        try:
+            login = await db_get("SELECT 1 AS x FROM panel_logins WHERE uid=? LIMIT 1", (uid,))
+            dokon = await db_get("SELECT 1 AS x FROM shops WHERE owner_id=? LIMIT 1", (uid,))
+        except Exception:
+            continue
+        if login and dokon:
+            return uid
+    return None
+
+
+async def panel_sessiyalarini_yop(uid):
+    """Sotuvchining BARCHA panel (login/parol) sessiyalarini bekor qiladi.
+
+    Hamkor botda har /start da chaqiriladi: panel (Telegram ichida ham,
+    brauzerda ham, mobil ilovada ham) qaytadan login/parol so'raydi.
+    Xaridor sessiyalariga tegilmaydi (scope bo'sh)."""
+    try:
+        await db_run(
+            "UPDATE web_sessions SET revoked=1 "
+            "WHERE user_id=? AND revoked=0 AND COALESCE(scope,'')='seller'", (int(uid),))
+        return True
+    except Exception as e:
+        log.warning("panel sessiyalari yopilmadi (uid=%s): %s", uid, e)
+        return False
+
+
+# ── 🔐 To'siq: ulanmagan Telegram akkaunti bot funksiyalariga kira olmaydi ──
+# Ruxsat: /start (tekshiruv o'sha yerda), kontakt (ulash jarayoni), guruhlar,
+# adminlar. Qolgan shaxsiy xabarlar — faqat ULANGAN sotuvchidan.
+async def _faqat_ulangan(handler, event, data):
+    try:
+        from app.config import ADMIN_IDS
+        if (event.chat.type != "private" or event.contact
+                or (event.text or "").startswith("/start")
+                or int(event.from_user.id) in (ADMIN_IDS or [])):
+            return await handler(event, data)
+        if await ulangan_sotuvchi(event.from_user.id):
+            return await handler(event, data)
+    except Exception as e:
+        log.warning("to'siq tekshiruvi xato — o'tkazildi: %s", e)
+        return await handler(event, data)
+    from app.handlers.start import ulanmagan_javob
+    await ulanmagan_javob(event)
+    return None
+
+
+router.message.outer_middleware(_faqat_ulangan)
+
+
 # ── /start slink_<kod> ───────────────────────────────────────────────────
 # ⚠️ Bu handler `handlers/start.py` dagi `cmd_start` dan OLDIN ro'yxatga
 # olinishi SHART (`app/handlers/__init__.py` da birinchi import).
@@ -144,10 +223,11 @@ async def slink_kontakt(msg: Message):
         log.warning("slink: raqam mos emas (uid=%s, tg=%s)", uid, tgid)
         return
 
-    # Bu Telegram boshqa akkauntga bog'langan bo'lsa — ikki egalik bo'lmasin
+    # Bu Telegram BOSHQA sotuvchiga ulangan bo'lsa — ikki egalik bo'lmasin.
+    # (Telegram'ning o'z `telegram:<id>` yozuvi — bu to'qnashuv EMAS.)
     boshqa = await db_get(
         "SELECT user_id FROM auth_identities "
-        "WHERE provider='telegram' AND provider_uid=?", (str(tgid),))
+        "WHERE provider='tg_seller' AND provider_uid=?", (str(tgid),))
     if boshqa and int(boshqa["user_id"]) != uid:
         await db_run("DELETE FROM seller_tg_link WHERE code=?", (row["code"],))
         await msg.answer(
@@ -158,10 +238,14 @@ async def slink_kontakt(msg: Message):
 
     try:
         if not boshqa:
+            # Sotuvchi boshqa Telegram'dan qayta ulasa — eskisi o'rniga yangisi
+            await db_run(
+                "DELETE FROM auth_identities WHERE user_id=? AND provider='tg_seller'",
+                (uid,))
             await db_run(
                 "INSERT INTO auth_identities(user_id,provider,provider_uid,"
                 "email,display_name) VALUES(?,?,?,?,?)",
-                (uid, "telegram", str(tgid), None, msg.from_user.username))
+                (uid, "tg_seller", str(tgid), None, msg.from_user.username))
         # ✅ Raqam Telegram tomonidan tasdiqlangan va paneldagi raqam bilan
         # mos tushdi — demak telefon TASDIQLANGAN. Botdan kelgan eski
         # sotuvchilarda `phone_verified` qo'yilmagan edi; shu qadam uni
@@ -181,6 +265,11 @@ async def slink_kontakt(msg: Message):
         "«✅ Buyurtmani qabul qildim» tugmasi chiqadi.\n\n"
         "_Panelga qaytsangiz «Ulangan» deb ko'rinadi._",
         reply_markup=ReplyKeyboardRemove())
+    try:
+        from app.handlers.start import sotuvchi_menyu
+        await sotuvchi_menyu(msg, uid)
+    except Exception as e:
+        log.warning("slink: menyu ko'rsatilmadi: %s", e)
     log.info("slink: uid=%s <-> tg=%s bog'landi", uid, tgid)
 
     try:
