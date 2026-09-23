@@ -44,14 +44,20 @@ async def _show_seller_menu(msg, u, suid=None, yopildi=False):
     lg = (u.get("lang") if u else None) or "uz"
     shop = await db_get("SELECT * FROM shops WHERE owner_id=?", (uid,))
     sname = (shop["shop_name"] if shop else None) or (u.get("clinic_name") if u else "") or "Do'konim"
+    sname = _md(sname)
     izoh = ("🔐 Xavfsizlik uchun panel sessiyalari yopildi — «🏪 Sotuvchi kabineti»ni "
             "ochib *login va parolingiz* bilan kiring.\n\n" if yopildi else "")
     await msg.answer(
-        f"🏪 *{sname}*\n📍 {(u.get('region') if u else '') or ''}\n\n"
+        f"🏪 *{sname}*\n📍 {_md((u.get('region') if u else '') or '')}\n\n"
         f"{izoh}"
         f"Sotuvchi paneliga xush kelibsiz! Pastdagi tugmalardan foydalaning 👇",
         reply_markup=kb_seller(lg, uid=uid, webapp_url=WEBAPP_URL),
     )
+
+
+def _md(s):
+    """Markdown maxsus belgilarini olib tashlaydi (do'kon nomi xabarni buzmasin)."""
+    return "".join(c for c in str(s or "") if c not in "*_`[]")
 
 
 async def sotuvchi_menyu(msg, suid, yopildi=False):
@@ -62,13 +68,16 @@ async def sotuvchi_menyu(msg, suid, yopildi=False):
 
 async def ulanmagan_javob(msg):
     """Telegram akkaunti hech bir sotuvchi paneliga ulanmagan — yo'l-yo'riq."""
+    from app.seller_link import _kontakt_kb
     await msg.answer(
         "🤝 *XazDent Hamkor* — bu bot faqat XazDent hamkor-sotuvchilari uchun.\n\n"
         "1️⃣ Sotuvchi paneliga *login va parolingiz* bilan kiring.\n"
         "2️⃣ Panelda «Telegram botni ulash» tugmasini bosing — shu bot ochiladi "
         "va raqamingiz tasdiqlanadi.\n\n"
-        "Login va parol administrator tomonidan beriladi.",
-        reply_markup=ReplyKeyboardRemove(),
+        "Login va parol administrator tomonidan beriladi.\n\n"
+        "📱 Panelga raqamingiz yozilgan bo'lsa — pastdagi «📱 Raqamimni yuborish» "
+        "tugmasini bosing, bot o'zi ulaydi.",
+        reply_markup=_kontakt_kb(),
     )
     await msg.answer(
         "👇 Panelga kirish:",

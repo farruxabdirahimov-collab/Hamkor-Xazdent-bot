@@ -124,16 +124,18 @@ async def panel_sessiyalarini_yop(uid):
 # Ruxsat: /start (tekshiruv o'sha yerda), kontakt (ulash jarayoni), guruhlar,
 # adminlar. Qolgan shaxsiy xabarlar — faqat ULANGAN sotuvchidan.
 async def _faqat_ulangan(handler, event, data):
+    # ⚠️ try ichida FAQAT tekshiruv: handler'ning o'z xatosi bu yerda ushlanib,
+    # handler IKKINCHI marta ishga tushirilmasin (ilgari shunday bo'lgan).
     try:
         from app.config import ADMIN_IDS
-        if (event.chat.type != "private" or event.contact
-                or (event.text or "").startswith("/start")
-                or int(event.from_user.id) in (ADMIN_IDS or [])):
-            return await handler(event, data)
-        if await ulangan_sotuvchi(event.from_user.id):
-            return await handler(event, data)
+        otkaz = (event.chat.type != "private" or bool(event.contact)
+                 or (event.text or "").startswith("/start")
+                 or int(event.from_user.id) in (ADMIN_IDS or [])
+                 or bool(await ulangan_sotuvchi(event.from_user.id)))
     except Exception as e:
         log.warning("to'siq tekshiruvi xato — o'tkazildi: %s", e)
+        otkaz = True
+    if otkaz:
         return await handler(event, data)
     from app.handlers.start import ulanmagan_javob
     await ulanmagan_javob(event)
@@ -172,7 +174,7 @@ async def slink_start(msg: Message):
     await msg.answer(
         "🤝 *XazDent Hamkor*\n\n"
         "Panel akkauntingizni ulash uchun telefon raqamingizni tasdiqlang.\n\n"
-        f"Panelda ro'yxatdan o'tgan raqam: *{yashirin}*\n\n"
+        f"Panelda ro'yxatdan o'tgan raqam: `{yashirin}`\n\n"
         "⚠️ Telegram akkauntingizdagi raqam SHU raqam bilan bir xil "
         "bo'lishi shart — aks holda ulanmaydi.",
         reply_markup=_kontakt_kb())
@@ -223,13 +225,20 @@ async def slink_kontakt(msg: Message):
         log.warning("slink: raqam mos emas (uid=%s, tg=%s)", uid, tgid)
         return
 
+    await _bogla(msg, uid, tgid, row["code"])
+
+
+async def _bogla(msg, uid, tgid, kod=None):
+    """Telegram tasdiqlagan raqami paneldagi raqam bilan MOS sotuvchini (uid)
+    shu Telegram akkauntiga ulaydi. kod — panel havolasi orqali kelgan bo'lsa."""
     # Bu Telegram BOSHQA sotuvchiga ulangan bo'lsa — ikki egalik bo'lmasin.
     # (Telegram'ning o'z `telegram:<id>` yozuvi — bu to'qnashuv EMAS.)
     boshqa = await db_get(
         "SELECT user_id FROM auth_identities "
         "WHERE provider='tg_seller' AND provider_uid=?", (str(tgid),))
     if boshqa and int(boshqa["user_id"]) != uid:
-        await db_run("DELETE FROM seller_tg_link WHERE code=?", (row["code"],))
+        if kod:
+            await db_run("DELETE FROM seller_tg_link WHERE code=?", (kod,))
         await msg.answer(
             "❌ Bu Telegram akkaunti boshqa XazDent hisobiga ulangan.\n\n"
             "Yordam uchun administratorga murojaat qiling.",
@@ -252,7 +261,8 @@ async def slink_kontakt(msg: Message):
         # yopadi va ular boshqa SMS so'ralmaydi.
         await db_run(
             "UPDATE users SET phone_verified=1 WHERE id=?", (uid,))
-        await db_run("DELETE FROM seller_tg_link WHERE code=?", (row["code"],))
+        if kod:
+            await db_run("DELETE FROM seller_tg_link WHERE code=?", (kod,))
     except Exception as e:
         log.error("slink bog'lash xato (uid=%s): %s", uid, e)
         await msg.answer("❌ Ulashda xatolik. Birozdan so'ng qayta urinib ko'ring.",
@@ -276,6 +286,63 @@ async def slink_kontakt(msg: Message):
         await _kutayotganlar(uid, tgid)
     except Exception as e:
         log.warning("slink: kutayotgan buyurtmalar xato: %s", e)
+
+
+# ── Kontakt (panel havolasisiz): raqam bo'yicha ulash ────────────────────
+# /start → ulanmagan foydalanuvchidan raqam so'raladi (`ulanmagan_javob`).
+# Telegram bergan raqam TASDIQLANGAN (qo'lda yozib bo'lmaydi). Login/paroli
+# va do'koni bor sotuvchilar ichidan paneldagi raqami AYNAN shu bo'lgan
+# BITTA akkaunt topilsa — ulanadi. Panelga kirish baribir login/parol.
+@router.message(F.contact)
+async def raqam_bilan_ulash(msg: Message):
+    tgid = int(msg.from_user.id)
+    k = msg.contact
+    if not k or int(getattr(k, "user_id", 0) or 0) != tgid:
+        await msg.answer(
+            "❌ Bu sizning raqamingiz emas.\n\n"
+            "Pastdagi «📱 Raqamimni yuborish» tugmasini bosing — qo'lda "
+            "yozilgan yoki boshqaning kontakti qabul qilinmaydi.",
+            reply_markup=_kontakt_kb())
+        return
+    kelgan = _raqam(k.phone_number)
+    if not kelgan:
+        await msg.answer("❌ Raqam O'zbekiston raqami emas.",
+                         reply_markup=ReplyKeyboardRemove())
+        return
+
+    suid = await ulangan_sotuvchi(tgid)
+    if suid:
+        from app.handlers.start import sotuvchi_menyu
+        await msg.answer("✅ Bu Telegram allaqachon ulangan.",
+                         reply_markup=ReplyKeyboardRemove())
+        await sotuvchi_menyu(msg, suid)
+        return
+
+    rows = await db_all(
+        "SELECT u.id, u.phone FROM users u "
+        "WHERE regexp_replace(COALESCE(u.phone,''),'[^0-9]','','g') LIKE ? "
+        "AND EXISTS (SELECT 1 FROM panel_logins pl WHERE pl.uid=u.id) "
+        "AND EXISTS (SELECT 1 FROM shops s WHERE s.owner_id=u.id)",
+        ("%" + kelgan[-9:],))
+    mos = sorted({int(r["id"]) for r in (rows or []) if _raqam(r["phone"]) == kelgan})
+
+    if not mos:
+        await msg.answer(
+            "❌ `+" + kelgan + "` raqami hech bir sotuvchi paneliga yozilmagan.\n\n"
+            "Panelga login/parol bilan kirib, telefon raqamingizni tekshiring "
+            "yoki administratorga murojaat qiling.",
+            reply_markup=ReplyKeyboardRemove())
+        log.info("raqam-ulash: mos sotuvchi yo'q (tg=%s)", tgid)
+        return
+    if len(mos) > 1:
+        await msg.answer(
+            "⚠️ Bu raqam bir nechta do'konga yozilgan.\n\n"
+            "Kerakli do'kon paneliga kiring va «Telegram botni ulash» "
+            "tugmasi orqali ulang.",
+            reply_markup=ReplyKeyboardRemove())
+        log.warning("raqam-ulash: %d ta mos sotuvchi (tg=%s)", len(mos), tgid)
+        return
+    await _bogla(msg, mos[0], tgid)
 
 
 async def _kutayotganlar(uid, tgid):
