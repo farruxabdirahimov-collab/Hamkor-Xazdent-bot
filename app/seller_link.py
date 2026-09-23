@@ -366,11 +366,18 @@ async def _kutayotganlar(uid, tgid):
                                                % (oid, int(r["buyer_id"] or 0))),
         ]])
         try:
-            await bot.send_message(
+            m = await bot.send_message(
                 tgid,
                 f"💳 *Buyurtma #{oid} TO'LANGAN — tayyorlang!*\n\n"
                 f"💰 Jami: {float(r['total_amount'] or 0):,.0f} so'm\n\n"
                 f"_Siz ulanishdan oldin kelgan buyurtma._",
                 reply_markup=kb)
+            # 🔄 Shu xabar endi buyurtmaning JONLI kartasi: asosiy servis uni
+            # to'liq ko'rinishga keltiradi va holat o'zgarsa tahrirlaydi
+            # (seller_msg_holat=NULL → fon kuzatuvchi bir necha soniyada chizadi).
+            await db_run(
+                "UPDATE catalog_orders SET seller_msg_bot='seller', seller_msg_chat=?, "
+                "seller_msg_id=?, seller_msg_holat=NULL WHERE id=?",
+                (int(tgid), int(m.message_id), oid))
         except Exception as e:
             log.warning("kutayotgan #%s yuborilmadi: %s", oid, e)
