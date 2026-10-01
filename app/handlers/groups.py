@@ -23,6 +23,22 @@ from app.services import (_build_seller_excel, _create_web_cart_order, _finish_r
 log = logging.getLogger(__name__)
 
 
+@router.message(F.text.startswith("/arizaguruh"))
+async def cmd_ariza_guruh(msg: Message):
+    """🤝 ADMIN guruhda yozadi → hamkor.xazdent.uz/hamkorlik arizalari shu guruhga tushadi.
+    Sozlama umumiy bazada (`settings.hamkor_ariza_chat_id`); arizani asosiy servis
+    shu (Hamkor) bot orqali yuboradi."""
+    if msg.from_user.id not in ADMIN_IDS:
+        await msg.answer("⚠️ Faqat admin uchun.")
+        return
+    if msg.chat.type not in ("group", "supergroup"):
+        await msg.answer("⚠️ Bu buyruq guruhda yoziladi: botni guruhga qo'shing va shu yerda /arizaguruh yozing.")
+        return
+    await update_setting("hamkor_ariza_chat_id", str(msg.chat.id))
+    await msg.answer("✅ Hamkorlik arizalari endi shu guruhga tushadi.\nGuruh ID: `%s`" % msg.chat.id,
+                     parse_mode="Markdown")
+
+
 @router.message(F.text == "/setgroup")
 async def cmd_setgroup(msg: Message):
     """Guruhda yozilganda shu guruhni do'konga bog'laydi."""
