@@ -102,6 +102,17 @@ async def menyu_yoki_ulash(msg):
 #  • Ulanmagan → do'kon OCHILMAYDI, ro'yxatdan o'tkazilmaydi — yo'l-yo'riq.
 @router.message(CommandStart())
 async def cmd_start(msg: Message, state: FSMContext):
+    # 👥 Guruhda /start: telefon/menyu tugmalari faqat shaxsiy chatda ishlaydi
+    # (aks holda «phone number can be requested in private chats only» xatosi).
+    # Admin yozsa — shu guruh hamkorlik arizalari guruhi sifatida bog'lanadi.
+    if msg.chat.type != "private":
+        if msg.chat.type in ("group", "supergroup") and msg.from_user and msg.from_user.id in ADMIN_IDS:
+            from app.database import update_setting
+            from app.guruh_kuzatuv import eslab_qol
+            await eslab_qol(msg.chat)
+            await update_setting("hamkor_ariza_chat_id", str(msg.chat.id))
+            await msg.answer("✅ Hamkorlik arizalari (hamkor.xazdent.uz) endi shu guruhga tushadi.\nGuruh ID: %s" % msg.chat.id)
+        return
     await state.clear()
     from app.seller_link import ulangan_sotuvchi, panel_sessiyalarini_yop
     suid = await ulangan_sotuvchi(msg.from_user.id)
