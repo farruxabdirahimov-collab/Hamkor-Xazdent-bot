@@ -284,92 +284,145 @@ async def checkout_pay_cod(call: CallbackQuery, state: FSMContext):
 #   • rad etishda stok qaytarilmasdi va pul qaytarish OCHILMASDI —
 #     to'langan buyurtma bekor qilinsa mijozning puli bizda qolardi.
 
-async def _ichki_amal(call: CallbackQuery, action: str):
-    """Asosiy servisdagi yagona mantiqni chaqiradi.
+async def _ichki_amal(call: CallbackQuery, action: str, order_id: int):
+    """Asosiy servisdagi YAGONA mantiqni chaqiradi (`/api/internal/seller_action`).
 
-    → True (bajarildi) yoki False (bajarilmadi, sabab aytildi)."""
+    Bosilgan xabar manzili ham yuboriladi: server uni buyurtma kartasining
+    nusxasi sifatida qayd etadi va holat qayerda o'zgarsa ham (bot, kabinet,
+    ilova, admin) shu xabarning matni va tugmalarini O'ZI yangilaydi.
+    → server javobi (dict) yoki None (xato — foydalanuvchiga aytildi)."""
     import aiohttp as _ah
-    parts = call.data.split("_")
-    try:
-        order_id = int(parts[2])
-    except Exception:
-        await call.answer()
-        return False, 0
-
     base = (os.getenv("WEB_UPSTREAM")
             or "https://xazdent-bot-production.up.railway.app").rstrip("/")
     kalit = (os.getenv("INTERNAL_API_KEY") or "").strip()
     if not kalit:
         log.error("INTERNAL_API_KEY yo'q — buyurtma amali bajarilmadi")
-        await call.answer("Sozlama xatosi. Administratorga xabar bering.",
-                          show_alert=True)
-        return False, order_id
+        await _ayt(call, "Sozlama xatosi. Administratorga xabar bering.")
+        return None
     try:
         async with _ah.ClientSession() as ss:
             async with ss.post(
                     base + "/api/internal/seller_action",
                     json={"tg_id": int(call.from_user.id),
-                          "order_id": order_id, "action": action},
+                          "order_id": int(order_id), "action": action,
+                          "chat_id": int(call.message.chat.id),
+                          "message_id": int(call.message.message_id)},
                     # ⚠️ Cloudflare Python'ning standart User-Agent'ini
                     # bloklaydi (HTTP 403, "error code: 1010"). Shuning
                     # uchun UA ni ATAYLAB almashtiramiz.
                     headers={"X-Internal-Key": kalit,
                              "User-Agent": "curl/8.4.0"},
-                    timeout=_ah.ClientTimeout(total=30)) as r:
-                d = await r.json(content_type=None)
+                    # BTS jo'natma yaratish / yorliq yuklash bir necha soniya oladi
+                    timeout=_ah.ClientTimeout(total=90)) as r:
+                return await r.json(content_type=None)
     except Exception as e:
         log.error("ichki amal xato (#%s, %s): %s", order_id, action, e)
-        await call.answer("Tarmoq xatosi — birozdan so'ng qayta urinib ko'ring.",
-                          show_alert=True)
-        return False, order_id
-
-    if not (d or {}).get("ok"):
-        await call.answer((d or {}).get("message")
-                          or "Amal bajarilmadi.", show_alert=True)
-        return False, order_id
-    return True, order_id
+        await _ayt(call, "Tarmoq xatosi — birozdan so'ng qayta urinib ko'ring.")
+        return None
 
 
-async def _karta_emasmi_tozala(call, order_id):
-    """🔄 Buyurtma kartasini ASOSIY servis holatga qarab o'zi yangilaydi
-    (matn + tugmalar). Shu sabab bu yerda uni BUZMAYMIZ.
-
-    Bosilgan xabar karta EMAS bo'lsa (eski nusxa) — faqat uning
-    tugmalarini olib tashlaymiz, eskirgan tugma turib qolmasin."""
+async def _ayt(call: CallbackQuery, matn: str):
+    """Ogohlantirish: callback'ga hali javob berilmagan bo'lsa — oyna, aks holda xabar."""
     try:
-        r = await db_get("SELECT seller_msg_bot, seller_msg_chat, seller_msg_id "
-                         "FROM catalog_orders WHERE id=?", (int(order_id),))
-        karta = bool(r and (r.get("seller_msg_bot") or "seller") == "seller"
-                     and int(r.get("seller_msg_chat") or 0) == int(call.message.chat.id)
-                     and int(r.get("seller_msg_id") or 0) == int(call.message.message_id))
+        await call.answer(matn, show_alert=True)
     except Exception:
-        karta = False
-    if karta:
+        try:
+            await call.message.answer("⚠️ " + matn)
+        except Exception:
+            pass
+
+
+def _oid(call: CallbackQuery, prefiks: str):
+    try:
+        return int(call.data[len(prefiks):].split("_")[0])
+    except Exception:
+        return 0
+
+
+async def _yorliq_yubor(call: CallbackQuery, d: dict, oid: int):
+    """📄 BTS yorlig'ini (PDF) shu chatga fayl qilib yuboradi."""
+    import base64 as _b64
+    if not d.get("pdf_b64"):
+        await call.message.answer("⚠️ " + (d.get("message") or "Yorliqni olib bo'lmadi — "
+                                          "kabinetdan «Yorliq» ni bosing."))
         return
-    try:
-        await call.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        pass
+    bc = d.get("barcode") or ""
+    await call.message.answer_document(
+        BufferedInputFile(_b64.b64decode(d["pdf_b64"]),
+                          filename=d.get("fayl") or f"BTS_{bc or oid}.pdf"),
+        caption=(f"🏷 Buyurtma #{oid} — BTS yorlig'i"
+                 + (f"\nBarcode: `{bc}`" if bc else "")
+                 + "\nChop etib qadoq ustiga yopishtiring va paketni BTS ga topshiring."))
 
+
+# 🔄 Kartaning matni va tugmalari bu yerda TAHRIRLANMAYDI — server holatdan
+# qayta chizadi va kartaning BARCHA nusxalari (sotuvchi, xodimlar, adminlar)
+# birga o'zgaradi. Bu yerda faqat qisqa javob (toast) beriladi.
 
 @router.callback_query(F.data.startswith("co_confirm_"))
 async def hk_catalog_confirm(call: CallbackQuery):
-    ok, order_id = await _ichki_amal(call, "confirm")
-    if not ok:
+    oid = _oid(call, "co_confirm_")
+    d = await _ichki_amal(call, "confirm", oid)
+    if d is None:
+        return
+    if not d.get("ok"):
+        await call.answer(d.get("message") or "Amal bajarilmadi.", show_alert=True)
         return
     # ℹ️ Xaridorga xabarni ASOSIY servis yuboradi — bu yerda takrorlamaymiz.
-    await _karta_emasmi_tozala(call, order_id)
     await call.answer("✅ Buyurtma qabul qilindi!")
 
 
 @router.callback_query(F.data.startswith("co_reject_"))
 async def hk_catalog_reject(call: CallbackQuery):
-    ok, order_id = await _ichki_amal(call, "reject")
-    if not ok:
+    oid = _oid(call, "co_reject_")
+    d = await _ichki_amal(call, "reject", oid)
+    if d is None:
         return
-    await _karta_emasmi_tozala(call, order_id)
+    if not d.get("ok"):
+        await call.answer(d.get("message") or "Amal bajarilmadi.", show_alert=True)
+        return
     await call.answer("❌ Rad etildi. To'langan bo'lsa — pul mijozga qaytariladi.",
                       show_alert=True)
+
+
+@router.callback_query(F.data.startswith("co_prep_"))
+async def hk_catalog_prep(call: CallbackQuery):
+    """📦 Tayyorlandi → keyingi tugma «🏷 BTS barcode yaratish»."""
+    oid = _oid(call, "co_prep_")
+    d = await _ichki_amal(call, "preparing", oid)
+    if d is None:
+        return
+    if not d.get("ok"):
+        await call.answer(d.get("message") or "Amal bajarilmadi.", show_alert=True)
+        return
+    await call.answer("📦 Tayyorlandi! Endi «BTS barcode yaratish» ni bosing.")
+
+
+@router.callback_query(F.data.startswith("co_bts_"))
+async def hk_catalog_bts(call: CallbackQuery):
+    """🏷 BTS jo'natma yaratadi va yorliqni (PDF) darhol yuboradi."""
+    oid = _oid(call, "co_bts_")
+    # BTS bir necha soniya javob beradi — tugma «qotib» qolmasin
+    await call.answer("⏳ BTS jo'natma yaratilmoqda…")
+    d = await _ichki_amal(call, "bts", oid)
+    if d is None:
+        return
+    if not d.get("ok"):
+        await call.message.answer("⚠️ " + (d.get("message") or "BTS jo'natma yaratilmadi."))
+        return
+    d = await _ichki_amal(call, "sticker", oid)
+    if d is not None:
+        await _yorliq_yubor(call, d, oid)
+
+
+@router.callback_query(F.data.startswith("co_stk_"))
+async def hk_catalog_sticker(call: CallbackQuery):
+    """📄 BTS yorlig'ini qayta yuboradi."""
+    oid = _oid(call, "co_stk_")
+    await call.answer("⏳ Yorliq yuklanmoqda…")
+    d = await _ichki_amal(call, "sticker", oid)
+    if d is not None:
+        await _yorliq_yubor(call, d, oid)
 
 
 @router.callback_query(F.data.startswith("ord_accept_"))
