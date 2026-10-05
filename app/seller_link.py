@@ -346,32 +346,32 @@ async def raqam_bilan_ulash(msg: Message):
 
 
 async def _kutayotganlar(uid, tgid):
-    """Ulangan zahoti — hali qabul qilinmagan TO'LANGAN buyurtmalar.
+    """Ulangan zahoti — sotuvchi harakatini KUTAYOTGAN buyurtmalar.
 
     Aks holda ulanishdan OLDIN kelgan buyurtmalar sotuvchiga umuman
-    ko'rinmay qolardi (xabar o'sha paytda yetib bormagan)."""
-    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+    ko'rinmay qolardi (xabar o'sha paytda yetib bormagan).
+
+    ⚠️ Ilgari faqat `status='pending' AND paid_at` olinardi — lekin to'langan
+    buyurtma `confirmed` bo'ladi, ya'ni ular hech qachon kelmasdi. Endi:
+    qabul / tayyorlash / BTS barcode bosqichidagi hammasi (to'lov kutilayotgan
+    va onlayn to'lanmaganlari bundan mustasno).
+
+    Xabar TUGMASIZ yuboriladi va darhol buyurtmaning JONLI kartasiga aylanadi:
+    asosiy servis (fon kuzatuvchisi, bir necha soniyada) uni hozirgi holatga
+    mos matn va tugmalar bilan qayta chizadi — eskirgan tugma bo'lmaydi."""
     rows = await db_all(
-        "SELECT id, buyer_id, total_amount FROM catalog_orders "
-        "WHERE seller_id=? AND status='pending' AND paid_at IS NOT NULL "
+        "SELECT id, total_amount, status FROM catalog_orders "
+        "WHERE seller_id=? AND status IN ('pending','confirmed','preparing') "
+        "AND (paid_at IS NOT NULL OR COALESCE(payment_type,'') IN ('cod','cash')) "
         "ORDER BY id DESC LIMIT 10", (uid,))
     for r in (rows or []):
         oid = int(r["id"])
-        kb = InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="✅ Buyurtmani qabul qildim",
-                                 callback_data="co_confirm_%d_%d"
-                                               % (oid, int(r["buyer_id"] or 0))),
-            InlineKeyboardButton(text="❌ Mavjud emas",
-                                 callback_data="co_reject_%d_%d"
-                                               % (oid, int(r["buyer_id"] or 0))),
-        ]])
         try:
             m = await bot.send_message(
                 tgid,
-                f"💳 *Buyurtma #{oid} TO'LANGAN — tayyorlang!*\n\n"
-                f"💰 Jami: {float(r['total_amount'] or 0):,.0f} so'm\n\n"
-                f"_Siz ulanishdan oldin kelgan buyurtma._",
-                reply_markup=kb)
+                f"🔄 *Buyurtma #{oid}* — {float(r['total_amount'] or 0):,.0f} so'm\n\n"
+                f"_Siz ulanishdan oldin kelgan buyurtma. Tugmalar bir necha "
+                f"soniyada paydo bo'ladi…_")
             # 🔄 Shu xabar endi buyurtmaning JONLI kartasi: asosiy servis uni
             # to'liq ko'rinishga keltiradi va holat o'zgarsa tahrirlaydi
             # (seller_msg_holat=NULL → fon kuzatuvchi bir necha soniyada chizadi).
