@@ -327,7 +327,7 @@ async def _ayt(call: CallbackQuery, matn: str):
         await call.answer(matn, show_alert=True)
     except Exception:
         try:
-            await call.message.answer("⚠️ " + matn)
+            await call.message.answer("⚠️ " + matn, parse_mode=None)
         except Exception:
             pass
 
@@ -344,7 +344,7 @@ async def _yorliq_yubor(call: CallbackQuery, d: dict, oid: int):
     import base64 as _b64
     if not d.get("pdf_b64"):
         await call.message.answer("⚠️ " + (d.get("message") or "Yorliqni olib bo'lmadi — "
-                                          "kabinetdan «Yorliq» ni bosing."))
+                                          "kabinetdan «Yorliq» ni bosing."), parse_mode=None)
         return
     bc = d.get("barcode") or ""
     await call.message.answer_document(
@@ -408,7 +408,7 @@ async def hk_catalog_bts(call: CallbackQuery):
     if d is None:
         return
     if not d.get("ok"):
-        await call.message.answer("⚠️ " + (d.get("message") or "BTS jo'natma yaratilmadi."))
+        await call.message.answer("⚠️ " + (d.get("message") or "BTS jo'natma yaratilmadi."), parse_mode=None)
         return
     d = await _ichki_amal(call, "sticker", oid)
     if d is not None:
