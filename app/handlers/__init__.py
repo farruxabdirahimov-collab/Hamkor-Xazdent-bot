@@ -5,6 +5,7 @@ start eng birinchi (cmd_start + menyu), keyin qolganlari.
 """
 # 🔗 seller_link ENG BIRINCHI: `/start slink_...` ni `cmd_start`
 # dan OLDIN ushlashi kerak (aiogram ro'yxat tartibida tekshiradi).
+from app import hamkor_lead  # noqa: F401  🤝 potensial sotuvchilar: /start hamkorlik + guruhdan reply (BIRINCHI)
 from app import seller_link  # noqa: F401  panelni botga ulash
 from app import guruh_kuzatuv  # noqa: F401  👥 guruhlarni eslab qolish + ariza guruhi
 from . import start       # noqa: F401  cmd_start, onboarding, menyu (Buyurtmalar/Yordam)

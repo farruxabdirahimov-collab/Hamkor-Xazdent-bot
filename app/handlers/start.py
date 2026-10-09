@@ -82,7 +82,8 @@ async def ulanmagan_javob(msg):
     await msg.answer(
         "👇 Panelga kirish:",
         reply_markup=ik([ib("🔐 Sotuvchi paneliga kirish",
-                            web_app=WebAppInfo(url=HAMKOR_URL + "/"))]),
+                            web_app=WebAppInfo(url=HAMKOR_URL + "/"))],
+                        [ib("🤝 Sotuvchi bo'lmoqchiman", "lead_boshla")]),
     )
 
 
@@ -92,8 +93,12 @@ async def menyu_yoki_ulash(msg):
     suid = await ulangan_sotuvchi(msg.from_user.id)
     if suid:
         await sotuvchi_menyu(msg, suid)
-    else:
-        await ulanmagan_javob(msg)
+        return
+    # 🤝 hamkor.xazdent.uz dan kelgan potensial sotuvchi — savoli guruhga ketadi
+    from app.hamkor_lead import lead_xabar
+    if await lead_xabar(msg):
+        return
+    await ulanmagan_javob(msg)
 
 
 # 🔐 /start (2026-09-23): Telegram akkaunti o'zi hech narsani ochmaydi.
