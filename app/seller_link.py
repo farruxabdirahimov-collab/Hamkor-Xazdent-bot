@@ -137,6 +137,13 @@ async def _faqat_ulangan(handler, event, data):
         otkaz = True
     if otkaz:
         return await handler(event, data)
+    # 🤝 hamkor.xazdent.uz dan kelgan potensial sotuvchi — savoli shartnoma guruhiga
+    try:
+        from app.hamkor_lead import lead_xabar
+        if await lead_xabar(event):
+            return None
+    except Exception as e:
+        log.warning("lead xabari ishlanmadi: %s", e)
     from app.handlers.start import ulanmagan_javob
     await ulanmagan_javob(event)
     return None
@@ -327,6 +334,11 @@ async def raqam_bilan_ulash(msg: Message):
     mos = sorted({int(r["id"]) for r in (rows or []) if _raqam(r["phone"]) == kelgan})
 
     if not mos:
+        # 🤝 Sotuvchi emas, lekin hamkor.xazdent.uz dan kelgan potensial sotuvchi —
+        # raqami menejerlarga (shartnoma guruhiga) yuboriladi.
+        from app.hamkor_lead import lead_raqam
+        if await lead_raqam(msg, kelgan):
+            return
         await msg.answer(
             "❌ `+" + kelgan + "` raqami hech bir sotuvchi paneliga yozilmagan.\n\n"
             "Panelga login/parol bilan kirib, telefon raqamingizni tekshiring "
