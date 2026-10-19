@@ -50,6 +50,23 @@ def kb_clinic(lg, uid=0, webapp_url=""):
 
 def kb_seller(lg, uid=0, webapp_url=""):
     """Sotuvchi klaviaturasi — YANGI Uzum-uslub kabinet (/hamkor) ochadi."""
+    # MVP:H — eski oqimlar (🤖 AI agent, 💰 Hisobim/balans, ⚙️ Profil/e'lon) menyuda
+    # ko'rinmaydi; buyurtmalar botda (mvp_buyurtma.py), qolgani kabinetda.
+    from app.config import mvp_rejim
+    if mvp_rejim():
+        if webapp_url and uid:
+            wa = WebAppInfo(url=cabinet_url(HAMKOR_URL, uid))
+            return rk(
+                [KeyboardButton(text="🏪 Sotuvchi kabineti", web_app=wa)],
+                [KeyboardButton(text="🔔 Buyurtmalar"),
+                 KeyboardButton(text="➕ Mahsulot qo\'shish", web_app=wa)],
+                [KeyboardButton(text="📖 Yordam")],
+            )
+        return rk(
+            [KeyboardButton(text="🏪 Sotuvchi kabineti")],
+            [KeyboardButton(text="🔔 Buyurtmalar")],
+            [KeyboardButton(text="📖 Yordam")],
+        )
     if webapp_url and uid:
         # Yangi sotuvchi kabineti — barcha bo'lim shu ilovada (mahsulot/buyurtma/
         # analitika/mablag'/reklama/hodim/obuna/AI). Eski catalog?role=seller emas.

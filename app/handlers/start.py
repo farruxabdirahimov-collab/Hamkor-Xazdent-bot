@@ -237,7 +237,14 @@ async def reg_terms_ok(call: CallbackQuery, state: FSMContext):
 
 # ── Menyu: Buyurtmalar / Yordam ──────────────────────────────────────────────
 @router.message(F.text == "🔔 Buyurtmalar")
-async def seller_orders(msg: Message):
+async def seller_orders(msg: Message, state: FSMContext):
+    # MVP:H — MVP buyurtmalari (catalog_orders, model='mvp') tugmalar bilan
+    from app.config import mvp_rejim
+    if mvp_rejim():
+        from app.handlers.mvp_buyurtma import buyurtmalar_royxati
+        await state.clear()
+        await buyurtmalar_royxati(msg)
+        return
     uid = msg.from_user.id
     rows = await db_all(
         "SELECT * FROM orders WHERE seller_id=? "
@@ -261,6 +268,12 @@ async def seller_orders(msg: Message):
 
 @router.message(F.text == "📖 Yordam")
 async def seller_help(msg: Message):
+    # MVP:H — MVP yordami (eski bo'limlar: Hisobim/Profil/AI — ko'rsatilmaydi)
+    from app.config import mvp_rejim
+    if mvp_rejim():
+        from app.handlers.mvp_buyurtma import YORDAM
+        await msg.answer(YORDAM, parse_mode="HTML")
+        return
     await msg.answer(
         "📖 *Yordam — Sotuvchi paneli*\n\n"
         "🛍 *Dental Market* — katalog va do'koningiz\n"

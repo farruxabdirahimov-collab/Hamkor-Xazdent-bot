@@ -25,6 +25,10 @@ log = logging.getLogger(__name__)
 
 @router.message(F.text == "💰 Hisobim")
 async def show_balance(msg: Message):
+    from app.config import mvp_rejim  # MVP:H — balans/to'ldirish MVP'da yo'q (yashirin)
+    if mvp_rejim():
+        from app.handlers.mvp_buyurtma import eski_bolim
+        return await eski_bolim(msg)
     u    = await get_user(msg.from_user.id)
     card = await get_setting("card_number") or "9860020138100068"
     await msg.answer(
@@ -36,6 +40,10 @@ async def show_balance(msg: Message):
 
 @router.callback_query(F.data == "topup")
 async def topup_start(call: CallbackQuery, state: FSMContext):
+    from app.config import mvp_rejim  # MVP:H
+    if mvp_rejim():
+        await call.answer("Bu bo'lim endi ishlamaydi.", show_alert=True)
+        return
     await state.set_state(TopupState.amount)
     await call.message.answer(
         "💰 *Hisob to'ldirish*\n\n"
