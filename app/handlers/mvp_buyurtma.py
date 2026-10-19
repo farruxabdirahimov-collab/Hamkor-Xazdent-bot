@@ -411,10 +411,7 @@ async def cb_mvp_amal(call: CallbackQuery, state: FSMContext):
         await _tugma_almashtir(call, kb_sabab(oid))
         await call.answer("Rad etish sababini tanlang")
         return
-    if amal == "yolda":
-        await _tugma_almashtir(call, kb_eta(oid))
-        await call.answer("Qachon yetkaziladi?")
-        return
+    # «Yo'lga chiqdi» — yetkazish muddati so'ralmaydi (logistika bilan aloqa yo'q, faqat holat)
     await _bajar(call, oid, amal)
 
 
