@@ -120,6 +120,16 @@ async def cmd_start(msg: Message, state: FSMContext):
         return
     await state.clear()
     from app.seller_link import ulangan_sotuvchi, panel_sessiyalarini_yop
+    # 🔗 DL: /start h-<bo'lim> | ho<id> | hp<id> — kabinet AYNAN shu bo'limda (app/deeplink.py).
+    # Parametrsiz /start o'zgarmaydi; havola sessiyalarni yopmaydi (kabinet baribir login so'raydi).
+    args = msg.text.split(maxsplit=1)[1].strip() if msg.text and " " in msg.text else ""
+    if args:
+        from app import deeplink as _dl
+        _d = _dl.ochish(args, "hamkor")
+        if _d:
+            from app.deeplink_bot import hamkor_javob
+            await hamkor_javob(msg, _d, HAMKOR_URL, bool(await ulangan_sotuvchi(msg.from_user.id)))
+            return
     suid = await ulangan_sotuvchi(msg.from_user.id)
     if not suid:
         await ulanmagan_javob(msg)
