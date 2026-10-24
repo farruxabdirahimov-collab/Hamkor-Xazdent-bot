@@ -120,6 +120,16 @@ async def cmd_start(msg: Message, state: FSMContext):
         return
     await state.clear()
     from app.seller_link import ulangan_sotuvchi, panel_sessiyalarini_yop
+    # 🔗 DL: /start h-<bo'lim> | ho<id> | hp<id> — kabinet AYNAN shu bo'limda (app/deeplink.py).
+    # Parametrsiz /start o'zgarmaydi; havola sessiyalarni yopmaydi (kabinet baribir login so'raydi).
+    args = msg.text.split(maxsplit=1)[1].strip() if msg.text and " " in msg.text else ""
+    if args:
+        from app import deeplink as _dl
+        _d = _dl.ochish(args, "hamkor")
+        if _d:
+            from app.deeplink_bot import hamkor_javob
+            await hamkor_javob(msg, _d, HAMKOR_URL, bool(await ulangan_sotuvchi(msg.from_user.id)))
+            return
     suid = await ulangan_sotuvchi(msg.from_user.id)
     if not suid:
         await ulanmagan_javob(msg)
@@ -237,7 +247,14 @@ async def reg_terms_ok(call: CallbackQuery, state: FSMContext):
 
 # ── Menyu: Buyurtmalar / Yordam ──────────────────────────────────────────────
 @router.message(F.text == "🔔 Buyurtmalar")
-async def seller_orders(msg: Message):
+async def seller_orders(msg: Message, state: FSMContext):
+    # MVP:H — MVP buyurtmalari (catalog_orders, model='mvp') tugmalar bilan
+    from app.config import mvp_rejim
+    if mvp_rejim():
+        from app.handlers.mvp_buyurtma import buyurtmalar_royxati
+        await state.clear()
+        await buyurtmalar_royxati(msg)
+        return
     uid = msg.from_user.id
     rows = await db_all(
         "SELECT * FROM orders WHERE seller_id=? "
@@ -261,6 +278,12 @@ async def seller_orders(msg: Message):
 
 @router.message(F.text == "📖 Yordam")
 async def seller_help(msg: Message):
+    # MVP:H — MVP yordami (eski bo'limlar: Hisobim/Profil/AI — ko'rsatilmaydi)
+    from app.config import mvp_rejim
+    if mvp_rejim():
+        from app.handlers.mvp_buyurtma import YORDAM
+        await msg.answer(YORDAM, parse_mode="HTML")
+        return
     await msg.answer(
         "📖 *Yordam — Sotuvchi paneli*\n\n"
         "🛍 *Dental Market* — katalog va do'koningiz\n"

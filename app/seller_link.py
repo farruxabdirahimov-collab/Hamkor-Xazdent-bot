@@ -371,6 +371,12 @@ async def _kutayotganlar(uid, tgid):
     Xabar TUGMASIZ yuboriladi va darhol buyurtmaning JONLI kartasiga aylanadi:
     asosiy servis (fon kuzatuvchisi, bir necha soniyada) uni hozirgi holatga
     mos matn va tugmalar bilan qayta chizadi — eskirgan tugma bo'lmaydi."""
+    # MVP:H — MVP rejimida kutayotgan MVP buyurtmalar (tugmalari bilan) yuboriladi
+    from app.config import mvp_rejim
+    if mvp_rejim():
+        from app.handlers.mvp_buyurtma import kutayotganlar_yubor
+        await kutayotganlar_yubor(uid, tgid, bot)
+        return
     rows = await db_all(
         "SELECT id, total_amount, status FROM catalog_orders "
         "WHERE seller_id=? AND status IN ('pending','confirmed','preparing') "

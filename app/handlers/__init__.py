@@ -13,5 +13,6 @@ from . import seller      # noqa: F401  ehtiyojlar feed, takliflar, do'kon, stat
 from . import balance     # noqa: F401  💰 Hisobim + to'ldirish
 from . import profile     # noqa: F401  ⚙️ Profil
 from . import orders      # noqa: F401  buyurtma bajarish (seller-side)
+from . import mvp_buyurtma  # noqa: F401  MVP:H 🆕 MVP buyurtma tugmalari (mvp:*), /buyurtmalar, /tugadi, /bor
 from . import ai_agent     # noqa: F401  🤖 AI agent (/add) — groups fallback'dan OLDIN bo'lishi SHART
 from . import groups      # noqa: F401  /setgroup, claim + fallback (eng oxirida)

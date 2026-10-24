@@ -123,6 +123,10 @@ async def _show_card(msg_or_call, c, state, edit=False):
 
 
 async def _start_agent(msg: Message, state: FSMContext):
+    from app.config import mvp_rejim  # MVP:H — AI agent MVP'da yashirin (mahsulot — kabinetda)
+    if mvp_rejim():
+        from app.handlers.mvp_buyurtma import eski_bolim
+        return await eski_bolim(msg)
     u = await get_user(msg.from_user.id)
     if not u or u.get("role") != "seller":
         await msg.answer("Bu bo‘lim faqat sotuvchilar uchun. Sotuvchi bo‘lish uchun /start.")
