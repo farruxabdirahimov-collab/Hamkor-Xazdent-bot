@@ -15,12 +15,28 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from app.runtime import bot, dp, router, buyer_bot
 from app.config import (BOT_TOKEN, CHANNEL_ID, ADMIN_IDS, WEBAPP_URL, BASE_DIR, AD_PRICE_TOSHKENT, AD_PRICE_REGION, AD_PRICE_BOTH_AUD, AD_REGION_PRICES, AD_REGION_DEFAULT)
-from app.database import (init_db, get_user, db_run, db_get, db_all, db_insert, get_setting, update_setting, add_balance, get_next_room_code, generate_order_number, log_order_event, get_or_create_trust_score, update_trust_score, update_seller_metrics, get_pool)
+from app.database import (init_db, get_user, db_run, db_get, db_all, db_insert, get_setting, update_setting, add_balance, get_next_room_code, generate_order_number, log_order_event, notify_order_event, get_or_create_trust_score, update_trust_score, update_seller_metrics, get_pool)
 from app.texts import t, REGIONS, REGIONS_RU
 from app.keyboards import (ib, ik, kb_cancel, kb_clinic, kb_confirm, kb_deadline, kb_delivery, kb_lang, kb_regions, kb_role, kb_seller, kb_shop_cats, kb_units, rk)
 from app.states import (AdState, AdminState, BulkState, CheckoutState, ComplaintState, MyProductsState, NeedState, OfferState, PhotoOrderState, QuickOrderState, RegState, ReviewState, ShopState, SupportState, TopupState)
 from app.services import (_build_seller_excel, _create_web_cart_order, _finish_reg, _generate_article_code, _generate_qr_bytes, _get_usd_rate_from_cbu, _handle_web_cart, _notify_loser, _notify_winner, _payment_kb, _post_order_to_group, _save_offer, _save_review, _send_order_to_group, _send_product_qr, _send_quick_order, _show_batch_table, _show_checkout_confirm, _show_delivery_method, _show_product_start, _show_seller_stats, _start_offer_bot, build_excel, build_table, calc_ad_price, delivery_checker, expire_checker, fmt_price, get_or_create_room, has_profile, lang, notify_sellers, notify_sellers_batch, post_batch_to_channel, post_to_channel, usd_rate_checker)
 log = logging.getLogger(__name__)
+
+
+@router.message(F.text.startswith("/arizaguruh"))
+async def cmd_ariza_guruh(msg: Message):
+    """🤝 ADMIN guruhda yozadi → hamkor.xazdent.uz/hamkorlik arizalari shu guruhga tushadi.
+    Sozlama umumiy bazada (`settings.hamkor_ariza_chat_id`); arizani asosiy servis
+    shu (Hamkor) bot orqali yuboradi."""
+    if msg.from_user.id not in ADMIN_IDS:
+        await msg.answer("⚠️ Faqat admin uchun.")
+        return
+    if msg.chat.type not in ("group", "supergroup"):
+        await msg.answer("⚠️ Bu buyruq guruhda yoziladi: botni guruhga qo'shing va shu yerda /arizaguruh yozing.")
+        return
+    await update_setting("hamkor_ariza_chat_id", str(msg.chat.id))
+    await msg.answer("✅ Hamkorlik arizalari endi shu guruhga tushadi.\nGuruh ID: `%s`" % msg.chat.id,
+                     parse_mode="Markdown")
 
 
 @router.message(F.text == "/setgroup")
@@ -128,28 +144,26 @@ async def claim_order(call: CallbackQuery):
     uname = (u["clinic_name"] or u["full_name"] or str(buyer_id)) if u else str(buyer_id)
 
     try:
+        # MAXFIYLIK: do'kon nomi xaridorga KO'RSATILMAYDI
         await buyer_bot.send_message(
             buyer_id,
             f"✅ *Buyurtmangiz qabul qilindi!*\n\n"
-            f"🏪 *{shop_name}* jamoasi\n"
-            f"tez orada siz bilan bog\'lanadi.\n\n"
+            f"Sotuvchi tez orada jo'natadi.\n\n"
             f"📦 {prod_txt}"
         )
     except Exception as e:
         log.error(f"Claim buyer notify xato: {e}")
 
-    # Guruh a'zosiga xaridor kontakti
+    # Guruh a'zosiga — MAXFIYLIK: xaridor ismi/telefoni BERILMAYDI, faqat yetkazish hududi/manzili
     try:
         await bot.send_message(
             claimer,
             f"📋 *Buyurtma #{order_id} — Sizning zimmaingizda*\n\n"
-            f"👤 Xaridor: *{uname}*\n"
-            f"📞 {u['phone'] if u else '—'}\n"
             f"📍 {u['region'] if u else '—'}\n"
             f"🏠 {u['address'] if u else '—'}\n\n"
             f"📦 {prod_txt}\n\n"
             f"💰 Jami: *{order['total_amount']:,.0f} so\'m*\n\n"
-            f"_Kompaniya nomidan muloqot qiling!_"
+            f"🔒 _Mijoz ma'lumotlari maxfiy — yetkazishni XazDent muvofiqlashtiradi_"
         )
     except Exception as e:
         log.error(f"Claim claimer notify xato: {e}")
@@ -285,28 +299,27 @@ async def claim_order(call: CallbackQuery):
         uregion = buyer["region"] or "—"
         uaddr   = buyer["address"] or "—"
 
+        # MAXFIYLIK: xaridor ismi/telefoni BERILMAYDI — faqat yetkazish hududi/manzili
         contact_txt = (
             f"✅ *Buyurtma #{order_id} sizga biriktirildi!*\n\n"
             f"📦 *Buyurtma:*\n{lines_txt}\n"
             f"💰 *Jami: {order['total_amount']:,.0f} so'm*\n\n"
             f"━━━━━━━━━━━━━━━━━━\n"
-            f"👤 *Xaridor:* {uname}\n"
-            f"📞 *Telefon:* {uphone}\n"
             f"📍 *Hudud:* {uregion}\n"
             f"🏠 *Manzil:* {uaddr}\n\n"
-            f"_Iltimos, {sname} kompaniyasi nomidan bog\'laning_"
+            f"🔒 _Mijoz ma'lumotlari maxfiy — yetkazishni XazDent muvofiqlashtiradi_"
         )
         try:
             await bot.send_message(claimer, contact_txt)
         except Exception as e:
             log.error(f"Claim contact xato: {e}")
 
-    # Xaridorga ham xabar — kompaniya nomi bilan
+    # Xaridorga ham xabar — MAXFIYLIK: do'kon nomi KO'RSATILMAYDI
     try:
         await bot.send_message(
             order["buyer_id"],
             f"✅ *Buyurtmangiz #{order_id} qabul qilindi!*\n\n"
-            f"🏪 *{sname}* xodimi tez orada siz bilan bog\'lanadi."
+            f"Sotuvchi xodimi tez orada siz bilan bog\'lanadi."
         )
     except Exception:
         pass
@@ -373,6 +386,7 @@ async def partial_or_complaint_text(msg: Message, state: FSMContext):
 
         await db_run(
             "UPDATE catalog_orders SET status='partial' WHERE id=?", (order_id,))
+        await notify_order_event(order_id, "partial", seller_id)
 
         u = await get_user(seller_id)
         shop = await db_get("SELECT shop_name FROM shops WHERE owner_id=?", (seller_id,))
@@ -407,6 +421,7 @@ async def partial_or_complaint_text(msg: Message, state: FSMContext):
         (buyer_id, seller_id, reason))
     await db_run(
         "UPDATE catalog_orders SET status='disputed' WHERE id=?", (order_id,))
+    await notify_order_event(order_id, "disputed", buyer_id)
     await state.clear()
     await msg.answer(
         "✅ *Shikoyatingiz qabul qilindi.*\n\n"
@@ -430,13 +445,7 @@ async def fallback(msg: Message, state: FSMContext):
     current = await state.get_state()
     if current:
         return  # FSM davom etayotgan bo'lsa ignore
-    u  = await get_user(msg.from_user.id)
-    lg = (u["lang"] if u else None) or "uz"
-    if u and u["role"] in ("clinic", "zubtex"):
-        await msg.answer("🏥 *Klinika paneli*", reply_markup=kb_clinic(lg, uid=msg.from_user.id, webapp_url=WEBAPP_URL))
-    elif u and u["role"] == "seller":
-        uid2 = msg.from_user.id
-        await msg.answer("🛒 *Sotuvchi paneli*", reply_markup=kb_seller(lg, uid=uid2, webapp_url=WEBAPP_URL))
-    else:
-        await msg.answer(t(lg, "welcome"), reply_markup=kb_lang())
+    # 🔐 Hamkor bot — faqat ulangan sotuvchi menyusi (klinika/rol tanlash YO'Q)
+    from app.handlers.start import menyu_yoki_ulash
+    await menyu_yoki_ulash(msg)
 

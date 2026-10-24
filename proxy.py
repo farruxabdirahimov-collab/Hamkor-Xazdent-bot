@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
-"""hamkor.xazdent.uz uchun yengil reverse-proxy.
+"""hamkor.xazdent.uz uchun web-server (gibrid).
 
 Hamkor servisi sotuvchi botni ishlatadi; bu modul shu servisda port 8080'da
-web-server ham ishga tushiradi va BARCHA so'rovlarni asosiy backend
-(xazdent-bot) ga uzatadi. Shunda hamkor.xazdent.uz to'liq katalogni ko'rsatadi
-(brauzer location.hostname=hamkor → avtomatik SOTUVCHI rejimi), kod dublikatisiz.
+web-server ham ishga tushiradi:
+
+  • Sotuvchi sahifasi (catalog.html) — SHU REPODAGI webapp/ dan to'g'ridan-to'g'ri
+    beriladi (brauzer location.hostname=hamkor → avtomatik SOTUVCHI rejimi).
+  • Qolgan barcha so'rovlar (/api/*, rasmlar, /static, /order, ...) asosiy
+    backend (xazdent-bot) ga uzatiladi — chunki ikkala bot BITTA umumiy
+    Postgres bazadan foydalanadi, API kodi bitta joyda turadi (dublikatsiz).
 """
 import os
 import logging
@@ -13,6 +17,15 @@ from aiohttp import web
 
 log = logging.getLogger("app.proxy")
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+WEBAPP_DIR = os.path.join(BASE_DIR, "webapp")
+
+# ⚠️ WEB_UPSTREAM — asosiy servisning TO'G'RIDAN-TO'G'RI Railway manzili
+# bo'lishi SHART. Uni Cloudflare orqali o'tadigan domenga (xazdent.uz /
+# admin.xazdent.uz) qo'ymang: bu servis hamkor.xazdent.uz ni ham o'zi
+# xizmat qiladi, so'rov Cloudflare'ga qaytib kelib halqa hosil qiladi va
+# hamkor.xazdent.uz 502 bera boshlaydi. 2026-09-22 da aynan shunday
+# bo'ldi — sayt bir necha daqiqa ishlamay qoldi.
 UPSTREAM = os.getenv("WEB_UPSTREAM", "https://xazdent-bot-production.up.railway.app").rstrip("/")
 
 # Uzatilmaydigan (hop-by-hop / qayta hisoblanadigan) sarlavhalar
@@ -20,10 +33,45 @@ _SKIP_REQ = {"host", "content-length", "connection", "keep-alive", "transfer-enc
 _SKIP_RESP = {"connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade",
               "content-encoding", "content-length"}
 
+# Mahalliy beriladigan statik fayllar (faqat ikonkalar — tez va o'zgarmaydi).
+# ⚠️ catalog.html BU YERДА BERILMAYDI: u ESKI sotuvchi paneli nusxasi edi va
+# eskirib qolardi. Sotuvchi kabineti backend'да yagona joyда (hamkor.html).
+_LOCAL_FILES = {
+    "/icon-192.png": "icon-192.png",
+    "/icon-512.png": "icon-512.png",
+}
 
-async def _proxy(request):
-    url = UPSTREAM + request.rel_url.raw_path_qs
+# hamkor.xazdent.uz uchun haqiqiy domen nomi — backend domen bo'yicha
+# yo'naltirish qilishi uchun uzatamiz (aks holda backend Railway ichki
+# domenini ko'radi va XARIDOR katalogini qaytaradi).
+PUBLIC_HOST = os.getenv("PUBLIC_HOST", "hamkor.xazdent.uz")
+
+
+async def _root(request):
+    """Bosh sahifa — YANGI sotuvchi kabineti (backend'даги /hamkor).
+    Mahalliy nusxa saqlanmaydi → kabinet har doim eng yangi versiya."""
+    return await _proxy(request, path_override="/hamkor")
+
+
+async def _local_file(request):
+    rel = _LOCAL_FILES.get(request.path)
+    if rel:
+        path = os.path.join(WEBAPP_DIR, rel)
+        if os.path.exists(path):
+            return web.FileResponse(path)
+    return await _proxy(request)
+
+
+async def _proxy(request, path_override=None):
+    if path_override:
+        qs = request.rel_url.query_string
+        url = UPSTREAM + path_override + (("?" + qs) if qs else "")
+    else:
+        url = UPSTREAM + request.rel_url.raw_path_qs
     req_headers = {k: v for k, v in request.headers.items() if k.lower() not in _SKIP_REQ}
+    # Backend haqiqiy domenni bilishi uchun (domen bo'yicha yo'naltirish)
+    req_headers["X-Forwarded-Host"] = PUBLIC_HOST
+    req_headers.setdefault("X-Forwarded-Proto", "https")
     try:
         body = await request.read()
         async with aiohttp.ClientSession(auto_decompress=True) as s:
@@ -40,11 +88,15 @@ async def _proxy(request):
 
 async def start_web():
     app = web.Application(client_max_size=40 * 1024 * 1024)
+    app.router.add_get("/", _root)
+    for p in _LOCAL_FILES:
+        app.router.add_get(p, _local_file)
+    # Qolgan barcha so'rovlar — upstream backend
     app.router.add_route("*", "/{tail:.*}", _proxy)
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.getenv("PORT", 8080))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    log.info(f"🌐 Hamkor web proxy: 0.0.0.0:{port} → {UPSTREAM}")
+    log.info(f"🌐 Hamkor web: 0.0.0.0:{port} (/ → {UPSTREAM}/hamkor, host={PUBLIC_HOST})")
     return runner

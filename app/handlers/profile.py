@@ -25,6 +25,10 @@ log = logging.getLogger(__name__)
 
 @router.message(F.text == "⚙️ Profil")
 async def show_profile(msg: Message, state: FSMContext):
+    from app.config import mvp_rejim  # MVP:H — eski profil (balans/e'lon) MVP'da yashirin
+    if mvp_rejim():
+        from app.handlers.mvp_buyurtma import eski_bolim
+        return await eski_bolim(msg)
     u  = await get_user(msg.from_user.id)
     lg = u["lang"] or "uz"
     txt = (

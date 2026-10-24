@@ -621,6 +621,41 @@ async def log_order_event(order_id: int, event_type: str,
         "VALUES(?,?,?,?,?)",
         (order_id, event_type, actor_type, actor_id, details))
 
+
+# Katalog buyurtmasi hodisasi → log-guruhga (xlog). Hech qachon xato ko'tarmaydi.
+_ORDER_LOG_LABELS = {
+    "new": "🆕 Yangi buyurtma", "confirmed": "✅ Sotuvchi qabul qildi",
+    "rejected": "❌ Sotuvchi rad etdi", "delivered": "📦 Yetkazildi",
+    "partial": "⚠️ Qisman bajarildi", "disputed": "⚠️ Nizo (xaridor)",
+    "completed": "🏁 Yakunlandi",
+}
+async def notify_order_event(order_id: int, event: str, actor_id: int = None):
+    """Katalog buyurtmasi (yaratish/holat) log-guruhga tushadi. Maxfiylik: xaridor
+    ism/telefoni YUBORILMAYDI — faqat raqam/summa/hudud/sotuvchi id."""
+    try:
+        from app import logger as _xlog
+        if not _xlog._enabled():
+            return
+        row = await db_get(
+            "SELECT co.buyer_id, co.seller_id, co.total_amount, co.order_number, "
+            "co.delivery_method, u.region "
+            "FROM catalog_orders co LEFT JOIN users u ON u.id=co.buyer_id WHERE co.id=?",
+            (order_id,))
+        if not row:
+            return
+        num = (row.get("order_number") or "").strip() or f"XD-{order_id}"
+        total = float(row.get("total_amount") or 0)
+        region = (row.get("region") or "—")
+        dm = (row.get("delivery_method") or "").strip()
+        lbl = _ORDER_LOG_LABELS.get(event, event)
+        msg = (f"{lbl}\n🧾 {num}\n💰 {total:,.0f} so'm\n📍 {region}"
+               f"\n🏪 sotuvchi #{row.get('seller_id')}")
+        if dm:
+            msg += f"\n🚚 {dm}"
+        _xlog.notify(msg, "ORDER")
+    except Exception:
+        pass
+
 async def get_or_create_trust_score(user_id: int) -> dict:
     """Xaridor trust score — yo'q bo'lsa yaratadi."""
     ts = await db_get(

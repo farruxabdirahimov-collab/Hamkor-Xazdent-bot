@@ -1,3 +1,5 @@
+from app.config import HAMKOR_URL
+from app.webtoken import cabinet_url
 from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton,
     ReplyKeyboardMarkup, KeyboardButton, WebAppInfo,
@@ -47,29 +49,48 @@ def kb_clinic(lg, uid=0, webapp_url=""):
     )
 
 def kb_seller(lg, uid=0, webapp_url=""):
-    """Sotuvchi klaviaturasi — WebApp tugmalari bilan."""
-    if webapp_url and uid:
-        mkt_url = f"{webapp_url}/catalog?uid={uid}&role=seller"
-        add_url = f"{webapp_url}/catalog?uid={uid}&role=seller&action=add"
-        ord_url = f"{webapp_url}/catalog?uid={uid}&role=seller#orders"
+    """Sotuvchi klaviaturasi — YANGI Uzum-uslub kabinet (/hamkor) ochadi."""
+    # MVP:H — eski oqimlar (🤖 AI agent, 💰 Hisobim/balans, ⚙️ Profil/e'lon) menyuda
+    # ko'rinmaydi; buyurtmalar botda (mvp_buyurtma.py), qolgani kabinetda.
+    from app.config import mvp_rejim
+    if mvp_rejim():
+        if webapp_url and uid:
+            wa = WebAppInfo(url=cabinet_url(HAMKOR_URL, uid))
+            return rk(
+                [KeyboardButton(text="🏪 Sotuvchi kabineti", web_app=wa)],
+                [KeyboardButton(text="🔔 Buyurtmalar"),
+                 KeyboardButton(text="➕ Mahsulot qo\'shish", web_app=wa)],
+                [KeyboardButton(text="📖 Yordam")],
+            )
         return rk(
-            [KeyboardButton(text="🛍 Dental Market",
-                           web_app=WebAppInfo(url=mkt_url))],
-            [KeyboardButton(text="➕ Mahsulot qo\'shish",
-                           web_app=WebAppInfo(url=add_url)),
-             KeyboardButton(text="🔔 Buyurtmalar")],
-            [KeyboardButton(text="💰 Hisobim"),
-             KeyboardButton(text="⚙️ Profil")],
+            [KeyboardButton(text="🏪 Sotuvchi kabineti")],
+            [KeyboardButton(text="🔔 Buyurtmalar")],
             [KeyboardButton(text="📖 Yordam")],
+        )
+    if webapp_url and uid:
+        # Yangi sotuvchi kabineti — barcha bo'lim shu ilovada (mahsulot/buyurtma/
+        # analitika/mablag'/reklama/hodim/obuna/AI). Eski catalog?role=seller emas.
+        cab_url = cabinet_url(HAMKOR_URL, uid)
+        return rk(
+            [KeyboardButton(text="🏪 Sotuvchi kabineti",
+                           web_app=WebAppInfo(url=cab_url))],
+            [KeyboardButton(text="🤖 AI bilan qo\'shish"),
+             KeyboardButton(text="➕ Mahsulot qo\'shish",
+                           web_app=WebAppInfo(url=cab_url))],
+            [KeyboardButton(text="🔔 Buyurtmalar"),
+             KeyboardButton(text="💰 Hisobim")],
+            [KeyboardButton(text="⚙️ Profil"),
+             KeyboardButton(text="📖 Yordam")],
         )
     # Fallback — WebApp URL yo'q
     return rk(
-        [KeyboardButton(text="🛍 Dental Market")],
-        [KeyboardButton(text="➕ Mahsulot qo\'shish"),
-         KeyboardButton(text="🔔 Buyurtmalar")],
-        [KeyboardButton(text="💰 Hisobim"),
-         KeyboardButton(text="⚙️ Profil")],
-        [KeyboardButton(text="📖 Yordam")],
+        [KeyboardButton(text="🏪 Sotuvchi kabineti")],
+        [KeyboardButton(text="🤖 AI bilan qo\'shish"),
+         KeyboardButton(text="➕ Mahsulot qo\'shish")],
+        [KeyboardButton(text="🔔 Buyurtmalar"),
+         KeyboardButton(text="💰 Hisobim")],
+        [KeyboardButton(text="⚙️ Profil"),
+         KeyboardButton(text="📖 Yordam")],
     )
 
 def kb_regions(lg):

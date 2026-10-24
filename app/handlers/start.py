@@ -13,7 +13,8 @@ from aiogram.types import (
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from app.runtime import bot, dp, router
-from app.config import ADMIN_IDS, WEBAPP_URL
+from app.config import ADMIN_IDS, WEBAPP_URL, HAMKOR_URL
+from aiogram.types import WebAppInfo
 from app.database import get_user, db_run, db_get, db_all, db_insert
 from app.texts import REGIONS
 from app.keyboards import ik, ib, rk, kb_seller, kb_regions
@@ -38,49 +39,105 @@ async def _ensure_shop(uid, u):
     return shop
 
 
-async def _show_seller_menu(msg, u):
-    uid = msg.from_user.id
+async def _show_seller_menu(msg, u, suid=None, yopildi=False):
+    uid = int(suid or (u.get("id") if u else 0) or msg.from_user.id)
     lg = (u.get("lang") if u else None) or "uz"
     shop = await db_get("SELECT * FROM shops WHERE owner_id=?", (uid,))
     sname = (shop["shop_name"] if shop else None) or (u.get("clinic_name") if u else "") or "Do'konim"
+    sname = _md(sname)
+    izoh = ("🔐 Xavfsizlik uchun panel sessiyalari yopildi — «🏪 Sotuvchi kabineti»ni "
+            "ochib *login va parolingiz* bilan kiring.\n\n" if yopildi else "")
     await msg.answer(
-        f"🏪 *{sname}*\n📍 {(u.get('region') if u else '') or ''}\n\n"
+        f"🏪 *{sname}*\n📍 {_md((u.get('region') if u else '') or '')}\n\n"
+        f"{izoh}"
         f"Sotuvchi paneliga xush kelibsiz! Pastdagi tugmalardan foydalaning 👇",
         reply_markup=kb_seller(lg, uid=uid, webapp_url=WEBAPP_URL),
     )
 
 
+def _md(s):
+    """Markdown maxsus belgilarini olib tashlaydi (do'kon nomi xabarni buzmasin)."""
+    return "".join(c for c in str(s or "") if c not in "*_`[]")
+
+
+async def sotuvchi_menyu(msg, suid, yopildi=False):
+    """Ulangan sotuvchi (suid) uchun menyu — boshqa modullar ham chaqiradi."""
+    u = await get_user(int(suid)) or {}
+    await _show_seller_menu(msg, u, suid=suid, yopildi=yopildi)
+
+
+async def ulanmagan_javob(msg):
+    """Telegram akkaunti hech bir sotuvchi paneliga ulanmagan — yo'l-yo'riq."""
+    from app.seller_link import _kontakt_kb
+    await msg.answer(
+        "🤝 *XazDent Hamkor* — bu bot faqat XazDent hamkor-sotuvchilari uchun.\n\n"
+        "1️⃣ Sotuvchi paneliga *login va parolingiz* bilan kiring.\n"
+        "2️⃣ Panelda «Telegram botni ulash» tugmasini bosing — shu bot ochiladi "
+        "va raqamingiz tasdiqlanadi.\n\n"
+        "Login va parol administrator tomonidan beriladi.\n\n"
+        "📱 Panelga raqamingiz yozilgan bo'lsa — pastdagi «📱 Raqamimni yuborish» "
+        "tugmasini bosing, bot o'zi ulaydi.",
+        reply_markup=_kontakt_kb(),
+    )
+    await msg.answer(
+        "👇 Panelga kirish:",
+        reply_markup=ik([ib("🔐 Sotuvchi paneliga kirish",
+                            web_app=WebAppInfo(url=HAMKOR_URL + "/"))],
+                        [ib("🤝 Sotuvchi bo'lmoqchiman", "lead_boshla")]),
+    )
+
+
+async def menyu_yoki_ulash(msg):
+    """/start'siz holat (fallback): ulangan bo'lsa menyu, aks holda yo'l-yo'riq."""
+    from app.seller_link import ulangan_sotuvchi
+    suid = await ulangan_sotuvchi(msg.from_user.id)
+    if suid:
+        await sotuvchi_menyu(msg, suid)
+        return
+    # 🤝 hamkor.xazdent.uz dan kelgan potensial sotuvchi — savoli guruhga ketadi
+    from app.hamkor_lead import lead_xabar
+    if await lead_xabar(msg):
+        return
+    await ulanmagan_javob(msg)
+
+
+# 🔐 /start (2026-09-23): Telegram akkaunti o'zi hech narsani ochmaydi.
+#  • Panelga ULANGAN (tg_seller) va login/paroli bor sotuvchi → uning BARCHA
+#    panel sessiyalari YOPILADI (panel qaytadan login/parol so'raydi) + menyu.
+#  • Ulanmagan → do'kon OCHILMAYDI, ro'yxatdan o'tkazilmaydi — yo'l-yo'riq.
 @router.message(CommandStart())
 async def cmd_start(msg: Message, state: FSMContext):
-    await state.clear()
-    uid = msg.from_user.id
-    u = await get_user(uid)
-    if not u:
-        await db_run(
-            "INSERT INTO users(id,username,full_name) VALUES(?,?,?) ON CONFLICT(id) DO NOTHING",
-            (uid, msg.from_user.username, msg.from_user.full_name),
-        )
-        u = await get_user(uid)
-        xlog.notify(
-            f"Yangi SOTUVCHI bot foydalanuvchisi:\n{msg.from_user.full_name} "
-            f"(@{msg.from_user.username or '—'})\nid={uid}", "NEW",
-        )
-
-    # Profil to'liq (xaridor botda ham ro'yxatdan o'tgan bo'lishi mumkin) → menyu
-    if u and u.get("phone") and u.get("region"):
-        await _ensure_shop(uid, u)
-        await _show_seller_menu(msg, u)
+    # 👥 Guruhda /start: telefon/menyu tugmalari faqat shaxsiy chatda ishlaydi
+    # (aks holda «phone number can be requested in private chats only» xatosi).
+    # Admin yozsa — shu guruh hamkorlik arizalari guruhi sifatida bog'lanadi.
+    if msg.chat.type != "private":
+        if msg.chat.type in ("group", "supergroup") and msg.from_user and msg.from_user.id in ADMIN_IDS:
+            from app.database import update_setting
+            from app.guruh_kuzatuv import eslab_qol
+            await eslab_qol(msg.chat)
+            await update_setting("hamkor_ariza_chat_id", str(msg.chat.id))
+            await msg.answer("✅ Hamkorlik arizalari (hamkor.xazdent.uz) endi shu guruhga tushadi.\nGuruh ID: %s" % msg.chat.id)
         return
-
-    # Aks holda — qisqa onboarding (xush kelibsiz/tushuntirish mini app ichida ko'rsatiladi)
-    await state.set_state(RegState.name)
-    await msg.answer(
-        "🏪 *XazDent — Sotuvchi paneli*\n\n"
-        "Sotuvchi sifatida ro'yxatdan o'tamiz.\n\n"
-        "Do'kon nomini yoki ism-familiyangizni kiriting:\n"
-        "_Masalan: DentalPlus — yoki — Alisher Karimov_",
-        reply_markup=ReplyKeyboardRemove(),
-    )
+    await state.clear()
+    from app.seller_link import ulangan_sotuvchi, panel_sessiyalarini_yop
+    # 🔗 DL: /start h-<bo'lim> | ho<id> | hp<id> — kabinet AYNAN shu bo'limda (app/deeplink.py).
+    # Parametrsiz /start o'zgarmaydi; havola sessiyalarni yopmaydi (kabinet baribir login so'raydi).
+    args = msg.text.split(maxsplit=1)[1].strip() if msg.text and " " in msg.text else ""
+    if args:
+        from app import deeplink as _dl
+        _d = _dl.ochish(args, "hamkor")
+        if _d:
+            from app.deeplink_bot import hamkor_javob
+            await hamkor_javob(msg, _d, HAMKOR_URL, bool(await ulangan_sotuvchi(msg.from_user.id)))
+            return
+    suid = await ulangan_sotuvchi(msg.from_user.id)
+    if not suid:
+        await ulanmagan_javob(msg)
+        return
+    yopildi = await panel_sessiyalarini_yop(suid)
+    log.info("start: tg=%s -> sotuvchi uid=%s, panel sessiyalari yopildi=%s",
+             msg.from_user.id, suid, yopildi)
+    await sotuvchi_menyu(msg, suid, yopildi=yopildi)
 
 
 @router.message(RegState.name)
@@ -190,7 +247,14 @@ async def reg_terms_ok(call: CallbackQuery, state: FSMContext):
 
 # ── Menyu: Buyurtmalar / Yordam ──────────────────────────────────────────────
 @router.message(F.text == "🔔 Buyurtmalar")
-async def seller_orders(msg: Message):
+async def seller_orders(msg: Message, state: FSMContext):
+    # MVP:H — MVP buyurtmalari (catalog_orders, model='mvp') tugmalar bilan
+    from app.config import mvp_rejim
+    if mvp_rejim():
+        from app.handlers.mvp_buyurtma import buyurtmalar_royxati
+        await state.clear()
+        await buyurtmalar_royxati(msg)
+        return
     uid = msg.from_user.id
     rows = await db_all(
         "SELECT * FROM orders WHERE seller_id=? "
@@ -214,6 +278,12 @@ async def seller_orders(msg: Message):
 
 @router.message(F.text == "📖 Yordam")
 async def seller_help(msg: Message):
+    # MVP:H — MVP yordami (eski bo'limlar: Hisobim/Profil/AI — ko'rsatilmaydi)
+    from app.config import mvp_rejim
+    if mvp_rejim():
+        from app.handlers.mvp_buyurtma import YORDAM
+        await msg.answer(YORDAM, parse_mode="HTML")
+        return
     await msg.answer(
         "📖 *Yordam — Sotuvchi paneli*\n\n"
         "🛍 *Dental Market* — katalog va do'koningiz\n"

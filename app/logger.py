@@ -19,7 +19,7 @@ LOGGER_BOT_TOKEN = os.getenv("LOGGER_BOT_TOKEN", "").strip()
 LOG_GROUP_ID     = os.getenv("LOG_GROUP_ID", "").strip()
 PROJECT_NAME     = os.getenv("PROJECT_NAME", "xazdent-backend").strip()
 
-_ICON = {"INFO": "ℹ️", "NEW": "🆕", "WARN": "⚠️", "ERROR": "🔴", "EVENT": "📌"}
+_ICON = {"INFO": "ℹ️", "NEW": "🆕", "WARN": "⚠️", "ERROR": "🔴", "EVENT": "📌", "ORDER": "🛒"}
 _recent = {}   # dedupe: (level, text) -> oxirgi yuborilgan vaqt
 
 
@@ -37,6 +37,19 @@ async def send_log(text, level="INFO"):
         return
     _recent[key] = now
     body = f"{_ICON.get(level, 'ℹ️')} [{PROJECT_NAME}] {level}\n{text}"
+    # 🧪 DEV: loglar PROD log-guruhига TUSHMASIN (u yerда haqiqiy buyurtmalar
+    # kuzatiladi — dev sinovlari aralashса chalkashadi). Dev'да manzil
+    # DEV_CHAT_ID; u berilmagan bo'lsa umuman yuborilmaydi.
+    target = LOG_GROUP_ID
+    try:
+        from app import stage as _stage
+        if _stage.IS_DEV:
+            if not _stage.DEV_CHAT_ID:
+                return
+            target = _stage.DEV_CHAT_ID
+            body = f"🧪 {_stage.DEV_LABEL}\n{body}"
+    except Exception:
+        pass
     if len(body) > 3900:
         body = body[:3900] + "…"
     try:
@@ -44,7 +57,7 @@ async def send_log(text, level="INFO"):
         async with aiohttp.ClientSession() as s:
             await s.post(
                 f"https://api.telegram.org/bot{LOGGER_BOT_TOKEN}/sendMessage",
-                json={"chat_id": LOG_GROUP_ID, "text": body,
+                json={"chat_id": target, "text": body,
                       "disable_web_page_preview": True},
                 timeout=aiohttp.ClientTimeout(total=10),
             )
@@ -66,11 +79,19 @@ def notify(text, level="INFO"):
 class TelegramLogHandler(logging.Handler):
     """ERROR+ darajadagi loglarni log-guruhga uzatadi —
     kоddagi mavjud log.error/log.exception larni avtomatik tutadi."""
+    # O'tkinchi polling/tarmoq xatolari — log-guruhga YUBORILMAYDI (o'zi tiklanadi, shovqin)
+    _SKIP = ("failed to fetch updates", "flood control", "retry after", "retryafter",
+             "bad gateway", "telegramservererror", "telegramnetworkerror",
+             "timed out", "connection reset", "temporary failure", "conflict: terminated")
+
     def emit(self, record):
         try:
             if record.levelno < logging.ERROR:
                 return
             msg = record.getMessage()
+            _low = (msg or "").lower()
+            if any(s in _low for s in self._SKIP):
+                return
             if record.exc_info:
                 import traceback
                 msg += "\n" + "".join(traceback.format_exception(*record.exc_info))[:1500]
