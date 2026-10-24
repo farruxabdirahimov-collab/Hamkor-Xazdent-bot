@@ -199,23 +199,15 @@ async def main():
     await M.cb_mvp_ortga(c, st)
     check(datalar(m.kb) == ["mvp:yolda:9", "mvp:rad:9"], "ortga")
 
-    # 5) yolda → Boshqa → FSM matn
-    c = FakeCall("mvp:yolda:9", m, bot)
-    await M.cb_mvp_amal(c, st)
-    check("mvpe:9:b" in datalar(m.kb), "eta tugmalari")
-    c = FakeCall("mvpe:9:b", m, bot)
-    await M.cb_mvp_eta(c, st)
-    check(await st.get_state() == M.MvpHolat.eta.state, "eta FSM holati")
+    # 5) yolda — yetkazish muddati (ETA) SO'RALMAYDI (99b9692): darhol holat «yolda», karta tahriri
     k0 = len(chaqiruvlar)
     javob = {"ok": True, "holat": "yolda"}
-    t = FakeMsg(text="Juma kuni", bot=bot, mid=99)
-    await M.fsm_eta(t, st)
-    check(len(chaqiruvlar) == k0 + 1 and chaqiruvlar[-1][1]["eta"] == "Juma kuni"
-          and chaqiruvlar[-1][1]["amal"] == "yolda", "eta yuborildi")
-    tur, kw = bot.edits[-1]
-    check(kw["message_id"] == 50 and "Juma kuni" in kw["text"]
-          and datalar(kw["reply_markup"]) == ["mvp:yetkazildi:9"], "eta karta tahriri")
-    check(await st.get_state() is None, "FSM tozalandi")
+    c = FakeCall("mvp:yolda:9", m, bot)
+    await M.cb_mvp_amal(c, st)
+    check(len(chaqiruvlar) == k0 + 1 and chaqiruvlar[-1][1]["amal"] == "yolda"
+          and not chaqiruvlar[-1][1].get("eta"), "yolda darhol (muddatsiz)")
+    check(not any(str(d).startswith("mvpe:") for d in datalar(m.kb)), "eta tugmalari yo'q")
+    check(await st.get_state() is None, "FSM yo'q")
 
     # 6) rad → Boshqa → /bekor
     c = FakeCall("mvpr:9:b", m, bot)
