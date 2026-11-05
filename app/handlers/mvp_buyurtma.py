@@ -21,6 +21,12 @@ Ichki tugmalar (backend bilmaydi, faqat shu bot):
   mvpo:<oid>         ortga (holatga mos tugmalar)
   mvpm:<t|b|x>:<pid> mahsulot holati (t=tugadi, b=bor, x=bekor)
 
+Maket tugmalari (backend kartasi — app/mvp_karta.py — ham shularni chizadi):
+  mvpk:<oid>         ✅ Qabul qildim — keshbek bo'lsa rozilik (`/api/mvp/ichki/buyurtma_info`), so'ng mvp:qabul
+  mvpa:<oid>         📞 Aloqa — vrach telefoni + XazDent operatori (kartaga javob xabari)
+  mvpu:<oid>         ➕ Qo'shimcha sotuv — do'kon mahsulotlari (`/api/mvp/ichki/taklif`)
+  mvpus:<oid>:<pid>  tanlangan mahsulot vrachga taklif (alohida buyurtma)
+
 Xabarlar HTML'da (bot standarti Markdown — har chaqiruvda parse_mode aniq beriladi).
 """
 import asyncio
@@ -55,24 +61,25 @@ AMALLAR = ("qabul", "rad", "yolda", "yetkazildi")
 AMAL_HOLAT = {"qabul": "qabul", "rad": "rad", "yolda": "yolda", "yetkazildi": "yetkazildi"}
 OCHIQ_HOLATLAR = ("yangi", "qabul", "yolda", "yetkazildi", "muammo")
 
+# Backend kartasi (app/mvp_karta.py HOLAT_KARTA) bilan BIR XIL — holat qatori almashganda uslub o'zgarmasin
 HOLAT_MATN = {
     "tolov_kutilmoqda": "⏳ To'lov kutilmoqda",
-    "yangi": "🆕 Yangi — qabul qiling",
-    "qabul": "✅ Qabul qilindi",
+    "yangi": "⏳ Javobingizni kutmoqda",
+    "qabul": "🟢 Qabul qilindi · tayyorlanmoqda",
     "yolda": "🚚 Yo'lda",
-    "yetkazildi": "📦 Yetkazildi — xaridor tasdig'i kutilmoqda",
-    "yopildi": "🏁 Yopildi",
-    "rad": "❌ Rad etildi",
+    "yetkazildi": "📦 Yetkazildi — vrach tasdig'i kutilmoqda",
+    "yopildi": "🏁 Yakunlandi",
+    "rad": "❌ Bekor qilindi",
     "bekor": "🚫 Bekor qilindi",
-    "muammo": "⚠️ Muammo — admin ko'rib chiqmoqda",
+    "muammo": "⚠️ Muammo — XazDent ko'rib chiqmoqda",
 }
 QISQA = {
-    "qabul": "✅ Qabul qilindi",
-    "rad": "❌ Rad etildi",
-    "yolda": "🚚 Yo'lga chiqdi",
+    "qabul": "✅ Qabul qilindi — vrachga xabar ketdi",
+    "rad": "❌ Bekor qilindi — vrachga xabar ketdi",
+    "yolda": "🚚 Yo'lga chiqdi — vrachga xabar ketdi",
     "yetkazildi": "📦 Yetkazildi deb belgilandi",
 }
-SABABLAR = ("Tugagan", "Narx o'zgargan", "Yetkaza olmaymiz")
+SABABLAR = ("Mahsulot tugagan", "Narx o'zgargan", "Yetkaza olmaymiz")
 ETALAR = ("Bugun", "Ertaga", "1–2 kun")
 TOLOV = {"payme": "Payme", "click": "Click", "rahmat": "Rahmat", "naqd": "💵 Naqd"}
 
@@ -124,17 +131,80 @@ def _btn(matn, data):
     return InlineKeyboardButton(text=matn, callback_data=data)
 
 
-def tugmalar(oid, holat):
-    """Holatga mos keyingi tugmalar (yo'q bo'lsa None — tugmalar olib tashlanadi)."""
+def tugmalar(oid, holat, naqd=False):
+    """Holatga mos keyingi tugmalar (yo'q bo'lsa None — tugmalar olib tashlanadi).
+    Backend kartasi (app/mvp_karta.py `tugmalar`) bilan BIR XIL tartib — maket: Qabul · Aloqa · Qo'shimcha sotuv · Bekor."""
+    aloqa = _btn("📞 Aloqa", f"mvpa:{oid}")
+    bekor = _btn("❌ Bekor qilish", f"mvp:rad:{oid}")
     if holat == "yangi":
-        rows = [[_btn("✅ Qabul qilish", f"mvp:qabul:{oid}"), _btn("❌ Rad", f"mvp:rad:{oid}")]]
+        rows = [[_btn("✅ Qabul qildim", f"mvpk:{oid}")],
+                [aloqa, _btn("➕ Qo'shimcha sotuv", f"mvpu:{oid}")], [bekor]]
     elif holat == "qabul":
-        rows = [[_btn("🚚 Yo'lga chiqdi", f"mvp:yolda:{oid}")], [_btn("❌ Rad", f"mvp:rad:{oid}")]]
+        rows = [[_btn("🚚 Yo'lga chiqdi", f"mvp:yolda:{oid}"), aloqa], [bekor]]
     elif holat == "yolda":
-        rows = [[_btn("📦 Yetkazildi", f"mvp:yetkazildi:{oid}")]]
+        rows = [[_btn("📦 Yetkazildi", f"mvp:yetkazildi:{oid}"), aloqa]]
+        if naqd:
+            rows.append([_btn("↩️ Xaridor olmadi", f"mvp:rad:{oid}")])
     else:
         return None
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def kb_rozilik(oid):
+    """🎁 Keshbekka rozilik — qabul qilishdan oldin (maket: rozilik bermasa qabul qilib bo'lmaydi)."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [_btn("✅ Roziman, qabul qilaman", f"mvp:qabul:{oid}")],
+        [_btn("↩️ Orqaga", f"mvpo:{oid}")]])
+
+
+def rozilik_matn(summa):
+    return (f"🎁 Vrach bu buyurtma uchun {_som(summa)} keshbek oladi. Bu summa uning sizdan keyingi "
+            f"buyurtmasidan ayiriladi. Rozilik bermasangiz, buyurtmani qabul qilib bo'lmaydi.")[:200]
+
+
+def aloqa_matn(oid, info):
+    """📞 Aloqa — vrach va XazDent operatori (HTML)."""
+    v = (info or {}).get("vrach") or {}
+    s = [f"📞 <b>Aloqa — buyurtma #{int(oid)}</b>"]
+    kim = " · ".join(x for x in (v.get("ism"), v.get("klinika")) if x)
+    if kim:
+        s.append("👨‍⚕️ " + _e(kim))
+    if v.get("telefon"):
+        s.append("Vrach: " + _e(v["telefon"]))
+    if v.get("telefon2"):
+        s.append("Yordamchi: " + _e(v["telefon2"]))
+    if (info or {}).get("operator"):
+        s.append(_e(info["operator"]))
+    s.append("To'lov yoki tafsilotni aniqlashtirib, buyurtmaga qayting.")
+    return "\n".join(s)
+
+
+def kb_taklif(oid, mahsulotlar):
+    """➕ Qo'shimcha sotuv — do'kon mahsulotlari (vrachga alohida buyurtma taklifi)."""
+    rows = [[_btn(f"{str(m.get('nom') or '')[:40]} — {_som(m.get('narx'))}", f"mvpus:{oid}:{int(m['id'])}")]
+            for m in (mahsulotlar or [])[:8] if m.get("id")]
+    rows.append([_btn("⬅️ Ortga", f"mvpo:{oid}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def parse_oid(data, prefiks):
+    """`<prefiks>:<oid>` → oid yoki None."""
+    try:
+        bosh, oid = str(data or "").split(":")
+        oid = int(oid)
+    except (ValueError, TypeError):
+        return None
+    return oid if bosh == prefiks and oid > 0 else None
+
+
+def parse_taklif(data):
+    """`mvpus:<oid>:<pid>` → (oid, pid) yoki None."""
+    try:
+        bosh, oid, pid = str(data or "").split(":")
+        oid, pid = int(oid), int(pid)
+    except (ValueError, TypeError):
+        return None
+    return (oid, pid) if bosh == "mvpus" and oid > 0 and pid > 0 else None
 
 
 def kb_sabab(oid):
@@ -377,25 +447,31 @@ async def _bajar(call: CallbackQuery, oid, amal, eta=None, sabab=None):
         await call.answer(xato_matn(d), show_alert=True)
         return False
     holat = yangi_holat(d, amal)
+    naqd = (await _holat_naqd(oid))[1] if holat == "yolda" else False
     if m:
         await kartani_yangila(call.bot, m.chat.id, m.message_id, bool(m.caption),
                               matn_yangila(_karta_html(m), holat, qoshimcha_qator(amal, eta, sabab),
                                            limit=1024 if m.caption else 4096),
-                              tugmalar(oid, holat))
+                              tugmalar(oid, holat, naqd))
     await call.answer(QISQA.get(amal, "✅ Bajarildi"))
     return True
 
 
 async def _holat_ol(oid):
     """Buyurtmaning joriy holati (bazadan). Xato bo'lsa — 'yangi'."""
+    return (await _holat_naqd(oid))[0]
+
+
+async def _holat_naqd(oid):
+    """(holat, naqdmi) — bazadan. Xato bo'lsa ('yangi', False)."""
     try:
         from app.database import db_get
-        r = await db_get("SELECT status FROM catalog_orders WHERE id=?", (int(oid),))
+        r = await db_get("SELECT status, tolov_provayder FROM catalog_orders WHERE id=?", (int(oid),))
         if r and r.get("status"):
-            return r["status"]
+            return r["status"], (r.get("tolov_provayder") or "") == "naqd"
     except Exception as e:
         log.warning("MVP holat o'qilmadi (#%s): %s", oid, e)
-    return "yangi"
+    return "yangi", False
 
 
 # ── Backend tugmalari: mvp:<amal>:<order_id> ─────────────────────────────
@@ -470,8 +546,89 @@ async def cb_mvp_ortga(call: CallbackQuery, state: FSMContext):
         await call.answer()
         return
     await state.clear()
-    await _tugma_almashtir(call, tugmalar(oid, await _holat_ol(oid)))
+    holat, naqd = await _holat_naqd(oid)
+    await _tugma_almashtir(call, tugmalar(oid, holat, naqd))
     await call.answer()
+
+
+# ── Maket tugmalari: keshbekka rozilik, aloqa, qo'shimcha sotuv ──────────
+async def _info(call, oid):
+    """Backend: keshbek + vrach aloqasi (egalik backendda tekshiriladi). Xato — alert, None."""
+    d = await backend_post("/api/mvp/ichki/buyurtma_info", {"order_id": int(oid), "seller_tg": int(call.from_user.id)})
+    if not d.get("ok"):
+        await call.answer(xato_matn(d), show_alert=True)
+        return None
+    return d
+
+
+@router.callback_query(F.data.startswith("mvpk:"))
+async def cb_mvp_rozilik(call: CallbackQuery, state: FSMContext):
+    """✅ Qabul qildim — keshbek bo'lsa avval rozilik (maket), bo'lmasa darhol qabul."""
+    oid = parse_oid(call.data, "mvpk")
+    if not oid:
+        await call.answer("Noma'lum tugma.", show_alert=True)
+        return
+    await state.clear()
+    d = await _info(call, oid)
+    if d is None:
+        return
+    summa = int(((d.get("keshbek") or {}).get("summa")) or 0)
+    if summa <= 0:
+        await _bajar(call, oid, "qabul")
+        return
+    await _tugma_almashtir(call, kb_rozilik(oid))
+    await call.answer(rozilik_matn(summa), show_alert=True)
+
+
+@router.callback_query(F.data.startswith("mvpa:"))
+async def cb_mvp_aloqa(call: CallbackQuery, state: FSMContext):
+    """📞 Aloqa — vrach telefoni va XazDent operatori (kartaga javob xabari)."""
+    oid = parse_oid(call.data, "mvpa")
+    if not oid:
+        await call.answer("Noma'lum tugma.", show_alert=True)
+        return
+    d = await _info(call, oid)
+    if d is None:
+        return
+    await call.answer()
+    if call.message:
+        await call.message.reply(aloqa_matn(oid, d), parse_mode=HTML, disable_web_page_preview=True)
+
+
+@router.callback_query(F.data.startswith("mvpu:"))
+async def cb_mvp_taklif_royxat(call: CallbackQuery, state: FSMContext):
+    """➕ Qo'shimcha sotuv — do'kon mahsulotlaridan tanlash (vrachga alohida buyurtma taklifi)."""
+    oid = parse_oid(call.data, "mvpu")
+    if not oid:
+        await call.answer("Noma'lum tugma.", show_alert=True)
+        return
+    d = await backend_post("/api/mvp/ichki/taklif", {"order_id": int(oid), "seller_tg": int(call.from_user.id)})
+    if not d.get("ok"):
+        await call.answer(xato_matn(d), show_alert=True)
+        return
+    ms = d.get("mahsulotlar") or []
+    if not ms:
+        await call.answer("Taklif qilish uchun sotuvdagi boshqa mahsulot yo'q.", show_alert=True)
+        return
+    await _tugma_almashtir(call, kb_taklif(oid, ms))
+    await call.answer("Vrachga nimani taklif qilamiz? Mahsulotni tanlang")
+
+
+@router.callback_query(F.data.startswith("mvpus:"))
+async def cb_mvp_taklif(call: CallbackQuery, state: FSMContext):
+    p = parse_taklif(call.data)
+    if not p:
+        await call.answer("Noma'lum tugma.", show_alert=True)
+        return
+    oid, pid = p
+    d = await backend_post("/api/mvp/ichki/taklif",
+                           {"order_id": oid, "seller_tg": int(call.from_user.id), "product_id": pid})
+    if not d.get("ok"):
+        await call.answer(xato_matn(d), show_alert=True)
+        return
+    holat, naqd = await _holat_naqd(oid)
+    await _tugma_almashtir(call, tugmalar(oid, holat, naqd))
+    await call.answer("✉️ Taklif vrachga yuborildi: " + str(d.get("mahsulot") or "")[:120], show_alert=True)
 
 
 # ── FSM: «Boshqa» sabab / muddat matni ───────────────────────────────────

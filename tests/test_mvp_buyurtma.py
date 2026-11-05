@@ -41,7 +41,7 @@ check(M.parse_ichki("mvpe:5:b", "mvpe") == (5, "b"), "ichki b")
 check(M.parse_ichki("mvpe:5:z", "mvpe") is None, "ichki z")
 check(M.parse_ichki("mvpr:5:1", "mvpe") is None, "ichki prefiks")
 check(M.tanlov_qiymat("b", M.SABABLAR) is None, "boshqa")
-check(M.tanlov_qiymat("0", M.SABABLAR) == "Tugagan", "sabab0")
+check(M.tanlov_qiymat("0", M.SABABLAR) == "Mahsulot tugagan", "sabab0")
 check(M.tanlov_qiymat("9", M.ETALAR) == "", "chegaradan tashqari")
 check(M.parse_mahsulot_cb("mvpm:t:44") == ("tugadi", 44), "mahsulot t")
 check(M.parse_mahsulot_cb("mvpm:x:0") == ("x", 0), "mahsulot x")
@@ -49,18 +49,28 @@ check(M.parse_mahsulot_cb("mvpm:q:1") is None, "mahsulot q")
 
 # callback_data 64 baytdan oshmasin
 big = 2 ** 62
-for kb in (M.tugmalar(big, "yangi"), M.tugmalar(big, "qabul"), M.kb_sabab(big), M.kb_eta(big)):
+for kb in (M.tugmalar(big, "yangi"), M.tugmalar(big, "qabul"), M.tugmalar(big, "yolda", True), M.kb_sabab(big),
+           M.kb_eta(big), M.kb_rozilik(big), M.kb_taklif(big, [{"id": big, "nom": "X" * 80, "narx": 10 ** 12}])):
     for row in kb.inline_keyboard:
         for b in row:
             check(len(b.callback_data.encode()) <= 64, "64 bayt")
 
-# ── tugmalar holatga mos ──
+# ── tugmalar holatga mos (maket: Qabul · Aloqa · Qo'shimcha sotuv · Bekor) ──
 def datalar(kb):
     return [b.callback_data for r in kb.inline_keyboard for b in r] if kb else []
-check(datalar(M.tugmalar(3, "yangi")) == ["mvp:qabul:3", "mvp:rad:3"], "yangi kb")
-check(datalar(M.tugmalar(3, "qabul")) == ["mvp:yolda:3", "mvp:rad:3"], "qabul kb")
-check(datalar(M.tugmalar(3, "yolda")) == ["mvp:yetkazildi:3"], "yolda kb")
+check(datalar(M.tugmalar(3, "yangi")) == ["mvpk:3", "mvpa:3", "mvpu:3", "mvp:rad:3"], "yangi kb")
+check(datalar(M.tugmalar(3, "qabul")) == ["mvp:yolda:3", "mvpa:3", "mvp:rad:3"], "qabul kb")
+check(datalar(M.tugmalar(3, "yolda")) == ["mvp:yetkazildi:3", "mvpa:3"], "yolda kb")
+check(datalar(M.tugmalar(3, "yolda", True)) == ["mvp:yetkazildi:3", "mvpa:3", "mvp:rad:3"], "yolda naqd kb")
 check(M.tugmalar(3, "yetkazildi") is None and M.tugmalar(3, "rad") is None, "yopiq kb")
+check(datalar(M.kb_rozilik(3)) == ["mvp:qabul:3", "mvpo:3"], "rozilik kb")
+check(datalar(M.kb_taklif(3, [{"id": 11, "nom": "Gluma", "narx": 240000}])) == ["mvpus:3:11", "mvpo:3"], "taklif kb")
+check(M.parse_oid("mvpk:5", "mvpk") == 5 and M.parse_oid("mvpk:x", "mvpk") is None and M.parse_oid("mvpa:5", "mvpk") is None,
+      "parse_oid")
+check(M.parse_taklif("mvpus:5:11") == (5, 11) and M.parse_taklif("mvpus:5:0") is None, "parse_taklif")
+check("70 250 so'm" in M.rozilik_matn(70250) and len(M.rozilik_matn(10 ** 15)) <= 200, "rozilik matni")
+_al = M.aloqa_matn(7, {"vrach": {"ism": "<b>Ali</b>", "klinika": "Smile", "telefon": "+998901112233"}, "operator": "Op"})
+check("&lt;b&gt;Ali" in _al and "+998901112233" in _al and "Op" in _al, "aloqa matni")
 
 # ── javob tahlili ──
 check(M.yangi_holat({"ok": True, "holat": "yolda"}, "qabul") == "yolda", "holat kaliti")
@@ -113,10 +123,14 @@ class FakeMsg:
         self.from_user = SimpleNamespace(id=uid)
         self.bot = bot
         self.answers = []
+        self.replies = []
         self.kb = None
 
     async def answer(self, text, **kw):
         self.answers.append(text)
+
+    async def reply(self, text, **kw):
+        self.replies.append(text)
 
     async def edit_reply_markup(self, reply_markup=None):
         self.kb = reply_markup
@@ -151,7 +165,12 @@ M.backend_post = fake_post
 async def holat_fake(oid):
     return "qabul"
 
+
+async def holat_naqd_fake(oid):
+    return "qabul", False
+
 M._holat_ol = holat_fake
+M._holat_naqd = holat_naqd_fake
 
 
 async def main():
@@ -171,7 +190,7 @@ async def main():
           and tana["seller_tg"] == 777, "qabul tana")
     tur, kw = bot.edits[-1]
     check(tur == "text" and kw["parse_mode"] == "HTML" and "Qabul qilindi" in kw["text"], "qabul tahrir")
-    check(datalar(kw["reply_markup"]) == ["mvp:yolda:9", "mvp:rad:9"], "qabul keyingi")
+    check(datalar(kw["reply_markup"]) == ["mvp:yolda:9", "mvpa:9", "mvp:rad:9"], "qabul keyingi")
     check(c.javoblar[-1][1] is False, "qabul toast")
 
     # 2) xato — alert, tahrir yo'q
@@ -197,7 +216,7 @@ async def main():
     # 4) ortga
     c = FakeCall("mvpo:9", m, bot)
     await M.cb_mvp_ortga(c, st)
-    check(datalar(m.kb) == ["mvp:yolda:9", "mvp:rad:9"], "ortga")
+    check(datalar(m.kb) == ["mvp:yolda:9", "mvpa:9", "mvp:rad:9"], "ortga")
 
     # 5) yolda — yetkazish muddati (ETA) SO'RALMAYDI (99b9692): darhol holat «yolda», karta tahriri
     k0 = len(chaqiruvlar)
@@ -231,6 +250,32 @@ async def main():
     javob = {"ok": True}
     await M.cb_mvp_amal(FakeCall("mvp:yetkazildi:9", mc, bot), st)
     check(bot.edits[-1][0] == "caption", "caption tahrir")
+
+    # 8a) ✅ Qabul qildim — keshbek bor: rozilik tugmalari + alert (amal HALI yuborilmaydi)
+    k0 = len(chaqiruvlar)
+    javob = {"ok": True, "keshbek": {"summa": 70250, "foiz": 5}}
+    c = FakeCall("mvpk:9", m, bot)
+    await M.cb_mvp_rozilik(c, st)
+    check(chaqiruvlar[-1][0] == "/api/mvp/ichki/buyurtma_info" and len(chaqiruvlar) == k0 + 1, "rozilik info")
+    check(datalar(m.kb) == ["mvp:qabul:9", "mvpo:9"] and c.javoblar[-1][1] is True
+          and "70 250" in c.javoblar[-1][0], "rozilik tugmalari")
+    # 8b) keshbek yo'q — darhol qabul
+    javob = {"ok": True, "keshbek": {"summa": 0}, "holat": "qabul"}
+    await M.cb_mvp_rozilik(FakeCall("mvpk:9", m, bot), st)
+    check(chaqiruvlar[-1][0] == "/api/mvp/ichki/amal" and chaqiruvlar[-1][1]["amal"] == "qabul", "keshbeksiz qabul")
+    # 8c) 📞 Aloqa — kartaga javob xabari
+    javob = {"ok": True, "vrach": {"ism": "Ali", "telefon": "+998901112233"}, "operator": "Op"}
+    c = FakeCall("mvpa:9", m, bot)
+    await M.cb_mvp_aloqa(c, st)
+    check(m.replies and "+998901112233" in m.replies[-1], "aloqa javobi")
+    # 8d) ➕ Qo'shimcha sotuv — ro'yxat, so'ng tanlash
+    javob = {"ok": True, "mahsulotlar": [{"id": 11, "nom": "Gluma", "narx": 240000}]}
+    await M.cb_mvp_taklif_royxat(FakeCall("mvpu:9", m, bot), st)
+    check(datalar(m.kb) == ["mvpus:9:11", "mvpo:9"], "taklif ro'yxati")
+    javob = {"ok": True, "yuborildi": True, "mahsulot": "Gluma"}
+    c = FakeCall("mvpus:9:11", m, bot)
+    await M.cb_mvp_taklif(c, st)
+    check(chaqiruvlar[-1][1].get("product_id") == 11 and "Gluma" in c.javoblar[-1][0], "taklif yuborildi")
 
     # 9) /tugadi oqimi
     javob = {"ok": True, "mahsulotlar": [{"id": 11, "nom": "Kompozit A2", "holat": "bor"}]}

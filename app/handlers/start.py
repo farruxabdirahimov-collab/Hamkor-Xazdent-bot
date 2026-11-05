@@ -69,21 +69,23 @@ async def sotuvchi_menyu(msg, suid, yopildi=False):
 async def ulanmagan_javob(msg):
     """Telegram akkaunti hech bir sotuvchi paneliga ulanmagan — yo'l-yo'riq."""
     from app.seller_link import _kontakt_kb
+    # 🧳 MH: shartnomasiz ham boshlash mumkin — telefon + SMS bilan o'zi ro'yxatdan o'tadi (mehmon sotuvchi)
     await msg.answer(
-        "🤝 *XazDent Hamkor* — bu bot faqat XazDent hamkor-sotuvchilari uchun.\n\n"
-        "1️⃣ Sotuvchi paneliga *login va parolingiz* bilan kiring.\n"
-        "2️⃣ Panelda «Telegram botni ulash» tugmasini bosing — shu bot ochiladi "
-        "va raqamingiz tasdiqlanadi.\n\n"
-        "Login va parol administrator tomonidan beriladi.\n\n"
-        "📱 Panelga raqamingiz yozilgan bo'lsa — pastdagi «📱 Raqamimni yuborish» "
-        "tugmasini bosing, bot o'zi ulaydi.",
+        "🤝 *XazDent Hamkor* — dental sotuvchilar uchun bot.\n\n"
+        "🧳 *Hoziroq sotishni boshlang:* telefon raqamingiz bilan 1 daqiqada ro'yxatdan o'ting. "
+        "Mehmon sotuvchi sifatida mahsulot qo'shasiz — vrachlar «Sotib olish»ni bosganda sizga "
+        "qo'ng'iroq qiladi.\n\n"
+        "Do'koningiz allaqachon bormi? Panelda «Telegram botni ulash» tugmasini bosing "
+        "yoki pastdagi «📱 Raqamimni yuborish»ni bosing — bot o'zi ulaydi.",
         reply_markup=_kontakt_kb(),
     )
     await msg.answer(
-        "👇 Panelga kirish:",
-        reply_markup=ik([ib("🔐 Sotuvchi paneliga kirish",
+        "👇 Boshlash:",
+        reply_markup=ik([ib("🧳 Mehmon sotuvchi bo'lish",
+                            web_app=WebAppInfo(url=HAMKOR_URL + "/?kirish=1"))],
+                        [ib("🔐 Sotuvchi paneliga kirish",
                             web_app=WebAppInfo(url=HAMKOR_URL + "/"))],
-                        [ib("🤝 Sotuvchi bo'lmoqchiman", "lead_boshla")]),
+                        [ib("🤝 XazDent oilasiga ariza", "lead_boshla")]),
     )
 
 
