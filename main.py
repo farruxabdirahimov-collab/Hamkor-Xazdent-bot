@@ -68,6 +68,12 @@ async def main():
     except Exception as e:
         log.error(f"web proxy ishga tushmadi: {e}")
     log.info("🏪 XazDent SOTUVCHI bot ishga tushdi!")
+    # Hamkor↔backend ichki kaliti ishlayaptimi — natija logga (xato bo'lsa log-guruhga ham)
+    try:
+        from app.handlers.mvp_buyurtma import ichki_kalit_tekshir
+        _kalit_vazifa = asyncio.create_task(ichki_kalit_tekshir())  # noqa: F841 — havola saqlanadi
+    except Exception as _ke:
+        log.error(f"ichki kalit tekshiruvi ishga tushmadi: {_ke}")
     xlog.notify("🏪 XazDent Sotuvchi bot ishga tushdi", "INFO")
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 

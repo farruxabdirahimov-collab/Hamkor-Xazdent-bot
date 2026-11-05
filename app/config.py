@@ -36,7 +36,9 @@ def mvp_rejim() -> bool:
 # BACKEND_URL bo'lmasa — mavjud WEB_UPSTREAM (hamkor proxy ham shu backendga boradi).
 BACKEND_URL = (os.getenv("BACKEND_URL") or os.getenv("WEB_UPSTREAM")
                or "https://xazdent-bot-production.up.railway.app").rstrip("/")
-ICHKI_KALIT = (os.getenv("ICHKI_KALIT") or "").strip()
+# Avval ICHKI_KALIT, bo'lmasa ikkala servisda bor INTERNAL_API_KEY (backend app/ichki_kalit.py ham shunday).
+ICHKI_KALIT = ((os.getenv("ICHKI_KALIT") or "").strip()
+               or (os.getenv("INTERNAL_API_KEY") or "").strip())
 
 
 # Repo ildizi

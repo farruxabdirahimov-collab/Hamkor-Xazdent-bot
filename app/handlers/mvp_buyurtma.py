@@ -385,6 +385,19 @@ async def backend_post(yol, tana):
     return {"ok": False, "error": "Tarmoq xatosi — birozdan so'ng qayta urinib ko'ring."}
 
 
+async def ichki_kalit_tekshir():
+    """Ishga tushganda: backend ichki kalitimizni qabul qiladimi? (bo'sh so'rov — kalit to'g'ri bo'lsa 400 «notogri»)."""
+    if not _cfg.mvp_rejim():
+        return
+    d = await backend_post("/api/mvp/ichki/buyurtma_info", {})
+    xato = str(d.get("error") or "")
+    if xato == "notogri":
+        log.warning("ICHKI kalit: OK (backend qabul qildi)")
+        return
+    sabab = {"yopiq": "backendda kalit yo'q", "ruxsat_yoq": "kalitlar mos emas"}.get(xato, xato or "noma'lum")
+    log.error("ICHKI kalit ishlamayapti (%s) — buyurtma tugmalari ishlamaydi", sabab)
+
+
 async def amal_yubor(oid, amal, seller_tg, eta=None, sabab=None, chat_id=None, message_id=None):
     tana = {"order_id": int(oid), "amal": amal, "seller_tg": int(seller_tg)}
     if eta:
