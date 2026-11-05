@@ -56,10 +56,13 @@ def kb_seller(lg, uid=0, webapp_url=""):
     if mvp_rejim():
         if webapp_url and uid:
             wa = WebAppInfo(url=cabinet_url(HAMKOR_URL, uid))
+            # «➕ Mahsulot qo'shish» — to'g'ridan qo'shish formasi (kabinet deeplink h-qoshish); bot raqam bilan
+            # ulangan bo'lsa kabinet login/SMS so'ramaydi (backend app/hamkor_tg_kirish.py)
+            wa_qosh = WebAppInfo(url=cabinet_url(HAMKOR_URL, uid) + "?startapp=h-qoshish")
             return rk(
                 [KeyboardButton(text="🏪 Sotuvchi kabineti", web_app=wa)],
                 [KeyboardButton(text="🔔 Buyurtmalar"),
-                 KeyboardButton(text="➕ Mahsulot qo\'shish", web_app=wa)],
+                 KeyboardButton(text="➕ Mahsulot qo\'shish", web_app=wa_qosh)],
                 [KeyboardButton(text="📖 Yordam")],
             )
         return rk(
