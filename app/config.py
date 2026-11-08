@@ -18,7 +18,26 @@ BOT_TOKEN       = os.getenv("BOT_TOKEN")                  # sotuvchi bot
 BUYER_BOT_TOKEN = os.getenv("BUYER_BOT_TOKEN", "").strip()  # xaridor bot (cross-notify)
 CHANNEL_ID      = os.getenv("CHANNEL_ID", "@xazdent")
 ADMIN_IDS       = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()]
-WEBAPP_URL      = os.getenv("WEBAPP_URL", "").rstrip("/")
+# 🌐 Foydalanuvchiga boradigan havolalar bazasi. PROD env'da WEBAPP_URL = Railway ichki domeni
+# (`*.up.railway.app`) — u O'zbekistonda SNI bo'yicha BLOKLANGAN: bot yuborgan «Buyurtmani ochish» va
+# boshqa havolalar mijozda ochilmasdi (2026-11-07). Shuning uchun railway domeni bo'lsa — Cloudflare'dagi
+# o'z domenimiz: env XAZ_SAYT_URL, bo'lmasa PROD → https://xazdent.uz, DEV → https://dev.xazdent.uz.
+# Xom qiymat WEBAPP_URL_XOM da — tashqi xizmatda ro'yxatdan o'tgan callback/redirect manzillari uchun.
+WEBAPP_URL_XOM = os.getenv("WEBAPP_URL", "").rstrip("/")
+
+
+def _ommaviy_url(u: str) -> str:
+    if not u or ".railway.app" not in u:
+        return u
+    o = (os.getenv("XAZ_SAYT_URL") or "").strip().rstrip("/")
+    if o.startswith("https://") and ".railway.app" not in o:
+        return o
+    bosqich = (os.getenv("APP_STAGE") or "prod").strip().lower()
+    dev = bosqich in ("dev", "development", "develop", "staging", "stage", "test") or "-development." in u
+    return "https://dev.xazdent.uz" if dev else "https://xazdent.uz"
+
+
+WEBAPP_URL = _ommaviy_url(WEBAPP_URL_XOM)
 # 🏪 Sotuvchi kabineti DOMENI (xazdent.uz/hamkor emas — alohida subdomen).
 # Env bilan almashtirish mumkin; bo'sh bo'lsa WEBAPP_URL/hamkor ishlatiladi.
 HAMKOR_URL = os.getenv("HAMKOR_URL", "https://hamkor.xazdent.uz").rstrip("/")
