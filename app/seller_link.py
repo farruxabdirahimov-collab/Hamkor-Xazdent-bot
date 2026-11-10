@@ -325,13 +325,24 @@ async def raqam_bilan_ulash(msg: Message):
         await sotuvchi_menyu(msg, suid)
         return
 
+    # 🔒 2026-11-09: faqat TASDIQLANGAN raqam (phone_verified=1). Backend raqam SMS-siz o'zgarsa belgini 0 qiladi —
+    # aks holda profil yoki checkout'da yozilgan begona raqam egasi shu kabinetga parolsiz ulanib olardi.
     rows = await db_all(
-        "SELECT u.id, u.phone FROM users u "
+        "SELECT u.id, u.phone, COALESCE(u.phone_verified,0) AS tasdiq FROM users u "
         "WHERE regexp_replace(COALESCE(u.phone,''),'[^0-9]','','g') LIKE ? "
         "AND EXISTS (SELECT 1 FROM panel_logins pl WHERE pl.uid=u.id) "
         "AND EXISTS (SELECT 1 FROM shops s WHERE s.owner_id=u.id)",
         ("%" + kelgan[-9:],))
-    mos = sorted({int(r["id"]) for r in (rows or []) if _raqam(r["phone"]) == kelgan})
+    _mos_hammasi = [r for r in (rows or []) if _raqam(r["phone"]) == kelgan]
+    mos = sorted({int(r["id"]) for r in _mos_hammasi if int(r.get("tasdiq") or 0) == 1})
+    if not mos and _mos_hammasi:
+        await msg.answer(
+            "⚠️ `+" + kelgan + "` raqami panelda hali TASDIQLANMAGAN.\n\n"
+            "Panelga login/parol bilan kiring va «Telegram botni ulash» tugmasini bosing "
+            "(yoki raqamni SMS kod bilan tasdiqlang), keyin qayta urinib ko'ring.",
+            reply_markup=ReplyKeyboardRemove())
+        log.warning("raqam-ulash: raqam tasdiqlanmagan (tg=%s, %d ta mos)", tgid, len(_mos_hammasi))
+        return
 
     if not mos:
         # 🤝 Sotuvchi emas, lekin hamkor.xazdent.uz dan kelgan potensial sotuvchi —

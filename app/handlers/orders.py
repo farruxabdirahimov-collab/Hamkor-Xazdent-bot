@@ -425,9 +425,35 @@ async def hk_catalog_sticker(call: CallbackQuery):
         await _yorliq_yubor(call, d, oid)
 
 
+async def _ord_egasi(call, idx, rol):
+    """🔒 2026-11-09: eski `orders` tugmalari — bosgan odam shu buyurtmaning sotuvchisi/xaridorimi.
+    callback_data'ni userbot bilan soxtalashtirib begona buyurtma holatini o'zgartirish mumkin edi."""
+    try:
+        oid = int(call.data.split("_")[idx])
+        r = await db_get("SELECT seller_id, buyer_id FROM orders WHERE id=?", (oid,))
+    except Exception:
+        return False
+    if not r:
+        return False
+    tg = int(call.from_user.id)
+    kerak = int(r["seller_id" if rol == "seller" else "buyer_id"] or 0)
+    if kerak == tg:
+        return True
+    if rol == "seller":
+        try:
+            from app.seller_link import ulangan_sotuvchi
+            return int(await ulangan_sotuvchi(tg) or 0) == kerak
+        except Exception:
+            return False
+    return False
+
+
 @router.callback_query(F.data.startswith("ord_accept_"))
 async def order_accept(call: CallbackQuery):
     """Sotuvchi buyurtmani qabul qiladi."""
+    if not await _ord_egasi(call, 2, "seller"):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
     await call.answer("✅ Qabul qilindi!")
     parts = call.data.split("_")
     oid     = int(parts[2])
@@ -470,6 +496,9 @@ async def order_accept(call: CallbackQuery):
 @router.callback_query(F.data.startswith("ord_reject_"))
 async def order_reject_ask(call: CallbackQuery, state: FSMContext):
     """Sotuvchi rad etish — sabab so'raydi."""
+    if not await _ord_egasi(call, 2, "seller"):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
     await call.answer()
     parts = call.data.split("_")
     oid      = int(parts[2])
@@ -488,6 +517,9 @@ async def order_reject_ask(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("ord_rej_reason_"))
 async def order_reject_confirm(call: CallbackQuery):
     """Rad etish tasdiqlash."""
+    if not await _ord_egasi(call, 4, "seller"):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
     await call.answer()
     parts = call.data.split("_")
     reason_code = parts[3]
@@ -529,6 +561,9 @@ async def order_reject_confirm(call: CallbackQuery):
 
 @router.callback_query(F.data.startswith("ord_preparing_"))
 async def order_preparing(call: CallbackQuery):
+    if not await _ord_egasi(call, 2, "seller"):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
     await call.answer("📦 Tayyorlanmoqda!")
     oid = int(call.data.split("_")[2])
     seller_id = call.from_user.id
@@ -564,6 +599,9 @@ async def order_preparing(call: CallbackQuery):
 
 @router.callback_query(F.data.startswith("ord_shipped_"))
 async def order_shipped(call: CallbackQuery, state: FSMContext):
+    if not await _ord_egasi(call, 2, "seller"):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
     await call.answer()
     oid = int(call.data.split("_")[2])
     seller_id = call.from_user.id
@@ -613,6 +651,9 @@ async def order_shipped(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("ord_delivered_"))
 async def order_delivered(call: CallbackQuery):
+    if not await _ord_egasi(call, 2, "seller"):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
     await call.answer("✅ Yetkazildi!")
     oid = int(call.data.split("_")[2])
     seller_id = call.from_user.id
@@ -650,6 +691,9 @@ async def order_delivered(call: CallbackQuery):
 
 @router.callback_query(F.data.startswith("ord_confirm_rcv_"))
 async def order_confirm_received(call: CallbackQuery):
+    if not await _ord_egasi(call, 3, "buyer"):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
     await call.answer("✅ Rahmat!")
     oid = int(call.data.split("_")[3])
     buyer_id = call.from_user.id
@@ -685,6 +729,9 @@ async def order_confirm_received(call: CallbackQuery):
 
 @router.callback_query(F.data.startswith("ord_not_rcv_"))
 async def order_not_received(call: CallbackQuery):
+    if not await _ord_egasi(call, 3, "buyer"):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
     await call.answer()
     oid = int(call.data.split("_")[3])
     buyer_id = call.from_user.id
@@ -755,6 +802,13 @@ async def catalog_order_delivered(call: CallbackQuery):
 @router.callback_query(F.data.startswith("co_problem_"))
 async def catalog_order_problem(call: CallbackQuery, state: FSMContext):
     """Xaridor muammo bildirdi."""
+    try:
+        _co = await db_get("SELECT buyer_id FROM catalog_orders WHERE id=?", (int(call.data.split("_")[2]),))
+    except Exception:
+        _co = None
+    if not _co or int(_co.get("buyer_id") or 0) != int(call.from_user.id):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
     parts    = call.data.split("_")
     order_id = int(parts[2])
     seller_id= int(parts[3])
