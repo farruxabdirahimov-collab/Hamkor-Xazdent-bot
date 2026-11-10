@@ -81,9 +81,30 @@ async def cmd_unsetgroup(msg: Message):
     await db_run("UPDATE shops SET group_chat_id=NULL WHERE owner_id=?", (uid,))
     await msg.answer("✅ Guruh bog'liqligi o'chirildi.")
 
+async def _claim_guruhmi(call, order_id):
+    """🔒 2026-11-09: «Olish» faqat shu buyurtma do'koniga bog'langan guruhda (shops.group_chat_id)."""
+    try:
+        o = await db_get("SELECT seller_id FROM catalog_orders WHERE id=?", (int(order_id),))
+        if not o:
+            return False
+        sh = await db_get("SELECT group_chat_id FROM shops WHERE owner_id=? AND group_chat_id IS NOT NULL "
+                          "ORDER BY id LIMIT 1", (int(o["seller_id"]),))
+        chat = getattr(getattr(call, "message", None), "chat", None)
+        return bool(sh) and chat is not None and str(chat.id) == str(sh["group_chat_id"])
+    except Exception:
+        return False
+
+
 @router.callback_query(F.data.startswith("claim_"))
 async def claim_order(call: CallbackQuery):
     """Guruh a'zosi buyurtmani o'z zimmasiga oladi."""
+    try:
+        _oid = int(call.data.rsplit("_", 1)[-1])
+    except Exception:
+        _oid = 0
+    if not await _claim_guruhmi(call, _oid):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
     parts    = call.data.split("_")
     order_id = int(parts[1])
     claimer  = call.from_user.id
@@ -223,6 +244,13 @@ async def cmd_removegroup(msg: Message):
 @router.callback_query(F.data.startswith("claim_order_"))
 async def claim_order(call: CallbackQuery):
     """Guruh a'zosi buyurtmani o'z zimmasiga oladi."""
+    try:
+        _oid = int(call.data[12:])
+    except Exception:
+        _oid = 0
+    if not await _claim_guruhmi(call, _oid):
+        await call.answer("Ruxsat yo'q", show_alert=True)
+        return
     order_id  = int(call.data[12:])
     claimer   = call.from_user.id
     claimer_name = call.from_user.full_name or "Xodim"
